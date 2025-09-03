@@ -76,6 +76,7 @@ DeliveredBefore(p, m1, m2) ==
   Delivered(p, m1) /\ Delivered(p, m2) /\
   IndexOf(receivedOrdered[p], m1) < IndexOf(receivedOrdered[p], m2)
 
+
 PropertyUniformTotalOrder ==
   \A m1, m2 \in MessagesToSend:
     \A p1, p2 \in Processes:
