@@ -76,14 +76,13 @@ DeliveredBefore(p, m1, m2) ==
   Delivered(p, m1) /\ Delivered(p, m2) /\
   IndexOf(receivedOrdered[p], m1) < IndexOf(receivedOrdered[p], m2)
 
-
 PropertyUniformTotalOrder ==
-  \A m1, m2 \in MessagesToSend:
-    \A p1, p2 \in Processes:
-      [](Delivered(p1, m1) /\ Delivered(p1, m2) /\ DeliveredBefore(p1, m1, m2)
-         /\ Delivered(p2, m1) /\ Delivered(p2, m2)
-         =>
-         DeliveredBefore(p2, m1, m2))
+  \A m1, m2 \in MessagesToSend :
+    \A p1, p2 \in Processes :
+      (m1 # m2) /\ (p1 # p2) =>
+        []( Delivered(p1,m1) /\ Delivered(p1,m2) /\ DeliveredBefore(p1,m1,m2)
+            => <>DeliveredBefore(p2,m1,m2) )
+
 
 NoDuplicates(seq) ==
   \A i, j \in 1..Len(seq): i /= j => seq[i] /= seq[j]

@@ -296,14 +296,12 @@ PropertyDB2ValueAgreement ==
 
 Read(t, k, v) ==
   \E i \in 1 .. Len(readSet[t]) :
-       LET tup == readSet[t][i] IN
-           tup[1] = k /\ tup[3] = v          \* tup = <<key,val,ver>>
+       LET tup == readSet[t][i] IN tup[1] = k /\ tup[3] = v
 
 \* Did transaction t ever read key k with value val?
 ReadVal(t, k, val) ==
   \E i \in 1 .. Len(readSet[t]) :
-       LET tup == readSet[t][i] IN
-           tup[1] = k /\ tup[2] = val
+       LET tup == readSet[t][i] IN tup[1] = k /\ tup[2] = val
 
 \* Did transaction t ever write key k with value val?
 WriteVal(t, k, val) ==
