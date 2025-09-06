@@ -122,7 +122,6 @@ TransactionOperation(t) ==
         \/ /\ op.type = "abort"
            /\ TransactionAbort(t)
 
-
 Valid(tx, s) ==
     \A i \in 1..Len(tx.rs):
         LET r == tx.rs[i] IN
@@ -136,23 +135,6 @@ ApplyWrites(db_s, ws) ==
         THEN [val |-> ws[k], ver |-> db_s[k].ver + 1]
         ELSE db_s[k]
     ]
-
-\* ServerApplyCommit(s) ==
-\*     /\ ABC!HasMessage(abcastQueue, "g1", s) 
-\*     /\ LET tx == ABC!UnwrapMessage(ABC!Message(abcastQueue, "g1", s)) IN
-\*        /\ abcastQueue' = ABC!Deliver(abcastQueue, "g1", s)
-\*        /\ received' = [received EXCEPT ![tx.transaction] = {tx} \cup received[tx.transaction]]
-\*        /\ IF Valid(tx, s)
-\*           THEN
-\*               /\ db' = [db EXCEPT ![s] = ApplyWrites(db[s], tx.ws)]
-\*               /\ s2c' = PLF!Send(s2c, s, tx.transaction, [type |-> "commitResponse", outcome |-> "committed"])
-\*               /\ decided' = [decided EXCEPT ![s][tx.transaction] = "committed"]
-\*           ELSE
-\*               /\ UNCHANGED db
-\*               /\ s2c' =  PLF!Send(s2c, s, tx.transaction, [type |-> "commitResponse", outcome |-> "aborted"])
-\*               /\ decided' = [decided EXCEPT ![s][tx.transaction] = "aborted"]
-\*        /\ UNCHANGED <<c2s, writeSet, readSet, versions, operations, pc, pendingRead, outcomes, sent>>
-
 
 ServerApplyCommit(s) ==
     /\ ABC!HasMessage(abcastQueue, "g1", s) 
@@ -175,7 +157,6 @@ ServerApplyCommit(s) ==
                 /\ decided' = [decided EXCEPT ![s][tx.transaction] = "aborted"]
         /\ UNCHANGED << c2s, writeSet, readSet, versions,
                         operations, pc, pendingRead, outcomes, sent >>
-
 
 TransactionOutcome(t) ==
     /\ t \in Transactions
@@ -209,11 +190,9 @@ ServerRespondRead(s) ==
                       /\ UNCHANGED s2c
                /\ UNCHANGED <<db, abcastQueue, outcomes, writeSet, readSet, versions, operations, pc, pendingRead, sent, received, decided>>
 
-
 Terminating ==
     /\ \A t \in Transactions: (outcomes[t] = "committed" \/ outcomes[t] = "aborted")
     /\ UNCHANGED vars
-
 
 Next ==
     \/ \E t \in Transactions: TransactionOperation(t)
@@ -231,7 +210,6 @@ Spec ==
     /\ \A s \in Servers:
          SF_vars(ServerApplyCommit(s))
        /\ SF_vars(ServerRespondRead(s))
-
 
 \* abcast properties
 
@@ -293,17 +271,14 @@ PropertyDB2ValueAgreement ==
      )
 
 \* Isolation level properties
-
 Read(t, k, v) ==
   \E i \in 1 .. Len(readSet[t]) :
        LET tup == readSet[t][i] IN tup[1] = k /\ tup[3] = v
 
-\* Did transaction t ever read key k with value val?
 ReadVal(t, k, val) ==
   \E i \in 1 .. Len(readSet[t]) :
        LET tup == readSet[t][i] IN tup[1] = k /\ tup[2] = val
 
-\* Did transaction t ever write key k with value val?
 WriteVal(t, k, val) ==
   writeSet[t][k] = val
 
@@ -341,17 +316,4 @@ Property_NoWriteSkew ==
                      /\ db[s]["x"].val = 12
                      /\ db[s]["y"].val = 21)
 
-    \* /\ operations =
-    \*     [ t \in Transactions |->
-    \*         IF t = "t1" THEN
-    \*             << [type |-> "read", key |-> "x"],
-    \*             [type |-> "read", key |-> "y"],
-    \*             [type |-> "write", key |-> "y", value |-> 21],
-    \*             [type |-> "commit"] >>
-    \*         ELSE
-    \*             << [type |-> "read", key |-> "x"],
-    \*             [type |-> "read", key |-> "y"],
-    \*             [type |-> "write", key |-> "x", value |-> 12],
-    \*             [type |-> "commit"] >>
-    \*     ]
 =============================================================================
