@@ -8,16 +8,16 @@ LOCAL WrapMessage(sender, receiver, msg) ==
 LOCAL AppendMessage(groupChannel, sender, receiver, msg) == 
   Append(groupChannel[receiver], WrapMessage(sender, receiver, msg))
 
+LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
+
 Channel(groups, processes) == 
   [g \in groups |-> [p \in processes |-> <<>>]]
-
-UnwrapMessage(wrappedMessage) == wrappedMessage.message
 
 HasMessage(channel, group, process) ==
   channel[group][process] /= <<>>
 
 Message(channel, group, process) ==
-  Head(channel[group][process])
+  UnwrapMessage(Head(channel[group][process]))
 
 Deliver(channel, group, process) ==
   [ g \in DOMAIN channel |->

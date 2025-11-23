@@ -10,22 +10,22 @@ LOCAL WrapMessage(sender, receiver, msg, id) ==
 LOCAL AppendMessage(link, sender, receiver, msg) == 
     link.links[receiver] \cup { WrapMessage(sender, receiver, msg, link.nextMessageId) }
 
-UnwrapMessage(wrappedMessage) == wrappedMessage.message
+LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
 
 PerfectLink(processes) == InitLink([ p \in processes |-> {} ])
 
 HasMessage(link, process) == link.links[process] /= {}
 
-Messages(link, process) == link.links[process]
+Messages(link, process) == { UnwrapMessage(m) : m \in link.links[process] }
 
 Send(link, sender, receiver, msg) == [
     links |-> [link.links EXCEPT ![receiver] = AppendMessage(link, sender, receiver, msg)],
     nextMessageId |-> link.nextMessageId + 1 
 ]
 
-Receive(link, process, wrappedMessage) == [
-    links |-> [link.links EXCEPT ![process] = { m \in link.links[process]: m # wrappedMessage }],
-    nextMessageId |-> link.nextMessageId
-]
+Receive(link, process, msg) == 
+    LET wrapped == CHOOSE m \in link.links[process] : UnwrapMessage(m) = msg
+    IN [links |-> [link.links EXCEPT ![process] = link.links[process] \ {wrapped}],
+        nextMessageId |-> link.nextMessageId]
 
 =============================================================================

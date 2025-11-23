@@ -16,20 +16,20 @@ LOCAL DuplicableSend(link, sender, receiver, msg) == [
     nextMessageId |-> link.nextMessageId + 1 
 ]
 
-UnwrapMessage(wrappedMessage) == wrappedMessage.message
+LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
 
 StubbornLink(processes) == InitLink([ p \in processes |-> {} ])
 
 HasMessage(link, process) == link.links[process] /= {}
 
-Messages(link, process) == link.links[process]
+Messages(link, process) == { UnwrapMessage(m) : m \in link.links[process] }
 
 Send(link, sender, receiver, msg) ==
     DuplicableSend(link, sender, receiver, msg)
 
-Receive(link, process, wrappedMessage) == [
-    links |-> [link.links EXCEPT ![process] = { m \in link.links[process]: m # wrappedMessage }],
-    nextMessageId |-> link.nextMessageId
-]
+Receive(link, process, msg) == 
+    LET wrapped == CHOOSE m \in link.links[process] : UnwrapMessage(m) = msg
+    IN [links |-> [link.links EXCEPT ![process] = link.links[process] \ {wrapped}],
+        nextMessageId |-> link.nextMessageId]
 
 =============================================================================

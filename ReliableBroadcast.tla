@@ -13,6 +13,8 @@ LOCAL AppendMessage(channel, sender, group, receiver, msg, id) ==
     WrapMessage(sender, receiver, msg, id)
   }
 
+LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
+
 Channel(groups, processes) == 
   [links |-> InitChannel(groups, processes), nextMessageId |-> 0]
 
@@ -20,9 +22,7 @@ HasMessage(channel, group, process) ==
   channel.links[group][process] /= {}
 
 Messages(channel, group, process) ==
-  channel.links[group][process]
-
-UnwrapMessage(wrappedMessage) == wrappedMessage.message
+  { UnwrapMessage(m) : m \in channel.links[group][process] }
 
 Broadcast(channel, group, sender, msg) ==
   [
@@ -36,10 +36,11 @@ Broadcast(channel, group, sender, msg) ==
     nextMessageId |-> channel.nextMessageId + 1
   ]
 
-Deliver(channel, group, process, wrappedMessage) ==
-  [
+Deliver(channel, group, process, msg) ==
+  LET wrapped == CHOOSE m \in channel.links[group][process] : UnwrapMessage(m) = msg
+  IN [
     links |-> [ channel.links EXCEPT
-                ![group][process] = { m \in channel.links[group][process] : m # wrappedMessage }
+                ![group][process] = channel.links[group][process] \ {wrapped}
               ],
     nextMessageId |-> channel.nextMessageId
   ]

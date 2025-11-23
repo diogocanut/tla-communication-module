@@ -17,13 +17,13 @@ LOCAL AppendMessage(channel, sender, group, receiver, msg, id) ==
     WrapMessage(sender, receiver, msg, id)
   }
 
-UnwrapMessage(wrappedMessage) == wrappedMessage.message
+LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
 
 HasMessage(channel, group, process) ==
   channel.links[group][process] /= {}
 
 Messages(channel, group, process) ==
-  channel.links[group][process]
+  { UnwrapMessage(m) : m \in channel.links[group][process] }
 
 LOCAL ShouldDrop(receiversToDrop, totalDrops) ==
   (Cardinality(receiversToDrop) + totalDrops) <= MaxDrops
@@ -51,10 +51,11 @@ Broadcast(channel, group, sender, msg, receiversToDrop) ==
     totalDrops |-> channel.totalDrops + actualDrops
   ]
 
-Deliver(channel, group, process, wrappedMessage) ==
-  [
+Deliver(channel, group, process, msg) ==
+  LET wrapped == CHOOSE m \in channel.links[group][process] : UnwrapMessage(m) = msg
+  IN [
     links |-> [ channel.links EXCEPT
-                  ![group][process] = { m \in channel.links[group][process] : m # wrappedMessage }
+                  ![group][process] = channel.links[group][process] \ {wrapped}
               ],
     nextMessageId |-> channel.nextMessageId,
     totalDrops |-> channel.totalDrops

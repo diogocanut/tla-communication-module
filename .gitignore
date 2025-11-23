@@ -1,4 +1,4 @@
-/states
+*states/
 *.out
 *.old
 .vscode

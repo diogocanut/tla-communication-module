@@ -34,10 +34,10 @@ ProcessReceive ==
         /\ link' = Receive(link, p, m)
         /\ received' =
              [received EXCEPT ![p] =
-                received[p] \cup {UnwrapMessage(m)}]
+                received[p] \cup {m}]
         /\ receivedOrdered' =
              [receivedOrdered EXCEPT ![p] =
-                Append(receivedOrdered[p], UnwrapMessage(m))]
+                Append(receivedOrdered[p], m)]
         /\ UNCHANGED <<counter, sent>>
 
 Termination ==

@@ -97,7 +97,7 @@ TransactionRead(t, op, s) ==
        /\ UNCHANGED <<db, s2c, abcastQueue, outcomes, operations, writeSet, readSet, versions, pc, sent, received, decided>>
 
     \/ /\ PLF!HasMessage(s2c, s, t)
-       /\ LET msg == PLF!UnwrapMessage(PLF!Message(s2c, s, t)) IN
+       /\ LET msg == PLF!Message(s2c, s, t) IN
             /\ s2c' = PLF!Receive(s2c, s, t)
             /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<msg.key, msg.value, msg.version>>)]
             /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
@@ -138,7 +138,7 @@ ApplyWrites(db_s, ws) ==
 
 ServerApplyCommit(s) ==
     /\ ABC!HasMessage(abcastQueue, "g1", s) 
-    /\ LET tx == ABC!UnwrapMessage(ABC!Message(abcastQueue, "g1", s)) IN
+    /\ LET tx == ABC!Message(abcastQueue, "g1", s) IN
         /\ abcastQueue' = ABC!Deliver(abcastQueue, "g1", s)
         /\ received' = [received EXCEPT ![tx.transaction] = {tx} 
                             \cup received[tx.transaction]]
@@ -163,8 +163,7 @@ TransactionOutcome(t) ==
     /\ outcomes[t] = "pending"
     /\ \E s \in Servers:
         /\ PLF!HasMessage(s2c, s, t)
-        /\ LET wrapped == PLF!Message(s2c, s, t) IN
-           LET msg == PLF!UnwrapMessage(wrapped) IN
+        /\ LET msg == PLF!Message(s2c, s, t) IN
                /\ s2c' = PLF!Receive(s2c, s, t)
                /\ msg.type = "commitResponse"
                /\ outcomes' = [outcomes EXCEPT ![t] = msg.outcome]
@@ -173,8 +172,7 @@ TransactionOutcome(t) ==
 ServerRespondRead(s) ==
     \E t \in DOMAIN c2s :
         /\ PLF!HasMessage(c2s, t, s)
-        /\ LET wrapped == PLF!Message(c2s, t, s) IN
-           LET msg == PLF!UnwrapMessage(wrapped) IN
+        /\ LET msg == PLF!Message(c2s, t, s) IN
                /\ c2s' = PLF!Receive(c2s, t, s)
                /\ IF msg.type = "read"
                   THEN

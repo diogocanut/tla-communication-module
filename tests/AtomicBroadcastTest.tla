@@ -28,8 +28,8 @@ ProcessSend ==
 ProcessReceive ==
     \E p \in Processes:
       /\ HasMessage(channel, "g1", p)
-      /\ received' = [received EXCEPT ![p] = received[p] \cup {UnwrapMessage(Message(channel, "g1", p))}]
-      /\ receivedOrdered' = [receivedOrdered EXCEPT ![p] = Append(receivedOrdered[p], UnwrapMessage(Message(channel, "g1", p)))]
+      /\ received' = [received EXCEPT ![p] = received[p] \cup {Message(channel, "g1", p)}]
+      /\ receivedOrdered' = [receivedOrdered EXCEPT ![p] = Append(receivedOrdered[p], Message(channel, "g1", p))]
       /\ channel' = Deliver(channel, "g1", p)
       /\ UNCHANGED <<counter, sent>>
 
