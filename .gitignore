@@ -3,3 +3,5 @@
 *.old
 .vscode
 *.txt
+.lsp/
+.clj-kondo/
