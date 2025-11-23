@@ -1,4 +1,3 @@
 # TLA+ Communication Module
 
-A reusable and modular **TLA+** library for modeling **communication primitives** in distributed systems.  
-In this module we provide abstractions for **point-to-point** and **broadcast** communication.
+A reusable and modular TLA+ library for modeling communication primitives over point-to-point and broadcast abstractions. It enables designers to formally describe and verify solutions by providing these primitives as building blocks for communication subsystems. The library includes fault injection for analyzing system behavior under unreliable conditions, such as message loss, duplication, and out-of-order delivery.
