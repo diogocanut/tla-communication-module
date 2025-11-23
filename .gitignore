@@ -2,6 +2,6 @@
 *.out
 *.old
 .vscode
-*.txt
 .lsp/
 .clj-kondo/
+.DS_Store
