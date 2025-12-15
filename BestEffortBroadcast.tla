@@ -3,17 +3,17 @@ EXTENDS Integers, FiniteSets, Sequences
 
 CONSTANT MaxDrops
 
-LOCAL WrapMessage(sender, receiver, msg, id) ==
-  [sender |-> sender, receiver |-> receiver, message |-> msg, messageId |-> id]
-
-LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
-
 LOCAL InitChannel(groups, processes) ==
   [g \in groups |-> [ p \in processes |-> {} ]]
 
-LOCAL AppendMessage(channel, sender, group, receiver, msg, id) ==
+LOCAL WrapMessage(sender, receiver, msg) ==
+  [sender |-> sender, receiver |-> receiver, message |-> msg]
+
+LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
+
+LOCAL AppendMessage(channel, sender, group, receiver, msg) ==
   channel[group][receiver] \union {
-    WrapMessage(sender, receiver, msg, id)
+    WrapMessage(sender, receiver, msg)
   }
 
 LOCAL IsReceiverToDrop(p, receiversToDrop) == 
@@ -30,7 +30,7 @@ LOCAL BroadcastToGroup(channel, group, sender, msg, receiversToDrop) ==
     IF IsReceiverToDrop(p, receiversToDrop) THEN
       channel.links[group][p]
     ELSE
-      AppendMessage(channel.links, sender, group, p, msg, channel.nextMessageId)
+      AppendMessage(channel.links, sender, group, p, msg)
   ]
 
 LOCAL UpdateChannelLinks(channel, group, newGroupLinks) ==
@@ -39,7 +39,7 @@ LOCAL UpdateChannelLinks(channel, group, newGroupLinks) ==
   ]
 
 Channel(groups, processes) ==
-  [links |-> InitChannel(groups, processes), nextMessageId |-> 0, totalDrops |-> 0]
+  [links |-> InitChannel(groups, processes), totalDrops |-> 0]
 
 HasMessage(channel, group, process) ==
   channel.links[group][process] /= {}
@@ -53,7 +53,6 @@ LOCAL BroadcastWithDrops(channel, group, sender, msg, receiversToDrop) ==
   IN
   [
     links |-> UpdateChannelLinks(channel, group, newGroupLinks),
-    nextMessageId |-> channel.nextMessageId + 1,
     totalDrops |-> channel.totalDrops + actualDrops
   ]
 
@@ -70,7 +69,6 @@ Deliver(channel, group, process, msg) ==
     links |-> [ channel.links EXCEPT
                   ![group][process] = channel.links[group][process] \ {wrapped}
               ],
-    nextMessageId |-> channel.nextMessageId,
     totalDrops |-> channel.totalDrops
   ]
 =============================================================================
