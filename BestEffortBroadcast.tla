@@ -6,18 +6,40 @@ CONSTANT MaxDrops
 LOCAL WrapMessage(sender, receiver, msg, id) ==
   [sender |-> sender, receiver |-> receiver, message |-> msg, messageId |-> id]
 
+LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
+
 LOCAL InitChannel(groups, processes) ==
   [g \in groups |-> [ p \in processes |-> {} ]]
-
-  Channel(groups, processes) ==
-  [links |-> InitChannel(groups, processes), nextMessageId |-> 0, totalDrops |-> 0 ]
 
 LOCAL AppendMessage(channel, sender, group, receiver, msg, id) ==
   channel[group][receiver] \union {
     WrapMessage(sender, receiver, msg, id)
   }
 
-LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
+LOCAL IsReceiverToDrop(p, receiversToDrop) == 
+  p \in receiversToDrop
+
+LOCAL CountDrops(receiversToDrop) == 
+  Cardinality(receiversToDrop)
+
+LOCAL CanDrop(receiversToDrop, totalDrops) ==
+  (CountDrops(receiversToDrop) + totalDrops) <= MaxDrops
+
+LOCAL BroadcastToGroup(channel, group, sender, msg, receiversToDrop) ==
+  [ p \in DOMAIN channel.links[group] |->
+    IF IsReceiverToDrop(p, receiversToDrop) THEN
+      channel.links[group][p]
+    ELSE
+      AppendMessage(channel.links, sender, group, p, msg, channel.nextMessageId)
+  ]
+
+LOCAL UpdateChannelLinks(channel, group, newGroupLinks) ==
+  [ g \in DOMAIN channel.links |->
+    IF g = group THEN newGroupLinks ELSE channel.links[g]
+  ]
+
+Channel(groups, processes) ==
+  [links |-> InitChannel(groups, processes), nextMessageId |-> 0, totalDrops |-> 0]
 
 HasMessage(channel, group, process) ==
   channel.links[group][process] /= {}
@@ -25,31 +47,22 @@ HasMessage(channel, group, process) ==
 Messages(channel, group, process) ==
   { UnwrapMessage(m) : m \in channel.links[group][process] }
 
-LOCAL ShouldDrop(receiversToDrop, totalDrops) ==
-  (Cardinality(receiversToDrop) + totalDrops) <= MaxDrops
-
-Broadcast(channel, group, sender, msg, receiversToDrop) ==
-  LET 
-    isReceiverToDrop(p) == p \in receiversToDrop
-    actualDrops == IF ShouldDrop(receiversToDrop, channel.totalDrops)
-            THEN Cardinality(receiversToDrop)
-            ELSE 0
+LOCAL BroadcastWithDrops(channel, group, sender, msg, receiversToDrop) ==
+  LET newGroupLinks == BroadcastToGroup(channel, group, sender, msg, receiversToDrop)
+      actualDrops == CountDrops(receiversToDrop)
   IN
   [
-    links |-> [
-      g \in DOMAIN channel.links |->
-        IF g = group THEN
-          [ p \in DOMAIN channel.links[g] |->
-            IF ShouldDrop(receiversToDrop, channel.totalDrops) /\ isReceiverToDrop(p) THEN
-              channel.links[g][p]
-            ELSE
-              AppendMessage(channel.links, sender, g, p, msg, channel.nextMessageId)
-          ]
-        ELSE channel.links[g]
-    ],
+    links |-> UpdateChannelLinks(channel, group, newGroupLinks),
     nextMessageId |-> channel.nextMessageId + 1,
     totalDrops |-> channel.totalDrops + actualDrops
   ]
+
+\* Non-deterministic broadcast: returns SET of all possible next channel states
+\* User writes: channel' \in Broadcast(channel, "g1", "p1", "msg")
+Broadcast(channel, group, sender, msg) ==
+  { BroadcastWithDrops(channel, group, sender, msg, receiversToDrop) :
+      receiversToDrop \in { r \in SUBSET DOMAIN channel.links[group] :
+                            CanDrop(r, channel.totalDrops) } }
 
 Deliver(channel, group, process, msg) ==
   LET wrapped == CHOOSE m \in channel.links[group][process] : UnwrapMessage(m) = msg

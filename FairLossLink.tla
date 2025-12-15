@@ -31,10 +31,11 @@ HasMessage(link, process) == link.links[process] /= {}
 
 Messages(link, process) == { UnwrapMessage(m) : m \in link.links[process] }
 
-Send(link, sender, receiver, msg, nonDeterministicShouldDrop) ==
-        IF nonDeterministicShouldDrop /\ ShouldDrop(link)
-        THEN DropMessage(link)
-        ELSE ReliableSend(link, sender, receiver, msg)
+\* Non-deterministic send: can either deliver or drop the message
+Send(link, sender, receiver, msg) ==
+    \/ /\ ShouldDrop(link)
+       /\ DropMessage(link)
+    \/ ReliableSend(link, sender, receiver, msg)
 
 Receive(link, process, msg) == 
     LET wrapped == CHOOSE m \in link.links[process] : UnwrapMessage(m) = msg

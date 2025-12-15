@@ -5,3 +5,4 @@
 .lsp/
 .clj-kondo/
 .DS_Store
+*.bin

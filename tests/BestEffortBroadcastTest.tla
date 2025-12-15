@@ -17,12 +17,12 @@ Termination ==
 
 SendP1 ==
   /\ counter < totalCounter
-  /\ channel' = Broadcast(channel, "g1", "p1", "m1", {"p2", "p1"})
+  /\ channel' \in Broadcast(channel, "g1", "p1", "m1")
   /\ counter' = counter + 1
 
 SendP2 ==
   /\ counter < totalCounter
-  /\ channel' = Broadcast(channel, "g1", "p2", "m1", {"p1", "p2"})
+  /\ channel' \in Broadcast(channel, "g1", "p2", "m1")
   /\ counter' = counter + 1
 
 DeliverOne ==
