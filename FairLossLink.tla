@@ -3,18 +3,13 @@ EXTENDS Integers, Sequences
 
 CONSTANT MaxDrops
 
-LOCAL InitLink(linksPerProcess) == [links |-> linksPerProcess, totalDrops |-> 0]
-
-LOCAL WrapMessage(sender, receiver, msg) == 
-    [ sender |-> sender, receiver |-> receiver, message |-> msg ]
-
-LOCAL AppendMessage(link, sender, receiver, msg) == 
-    link.links[receiver] \union { WrapMessage(sender, receiver, msg) }
+LOCAL InitLink(senders, receivers) == 
+    [links |-> [ s \in senders |-> [ r \in receivers |-> {} ] ], totalDrops |-> 0]
 
 LOCAL ShouldDrop(link) == link.totalDrops < MaxDrops
 
 LOCAL ReliableSend(link, sender, receiver, msg) == [
-    links |-> [link.links EXCEPT ![receiver] = AppendMessage(link, sender, receiver, msg)],
+    links |-> [link.links EXCEPT ![sender][receiver] = link.links[sender][receiver] \union {msg}],
     totalDrops |-> link.totalDrops
 ]
 
@@ -23,13 +18,13 @@ LOCAL DropMessage(link) == [
     totalDrops |-> link.totalDrops + 1
 ]
 
-LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
+FairLossLink(senders, receivers) == InitLink(senders, receivers)
 
-FairLossLink(processes) == InitLink([ p \in processes |-> {} ])
+HasMessage(link, sender, receiver) == 
+    link.links[sender][receiver] /= {}
 
-HasMessage(link, process) == link.links[process] /= {}
-
-Messages(link, process) == { UnwrapMessage(m) : m \in link.links[process] }
+Messages(link, sender, receiver) == 
+    link.links[sender][receiver]
 
 \* Non-deterministic send: can either deliver or drop the message
 Send(link, sender, receiver, msg) ==
@@ -37,9 +32,8 @@ Send(link, sender, receiver, msg) ==
        /\ DropMessage(link)
     \/ ReliableSend(link, sender, receiver, msg)
 
-Receive(link, process, msg) == 
-    LET wrapped == CHOOSE m \in link.links[process] : UnwrapMessage(m) = msg
-    IN [links |-> [link.links EXCEPT ![process] = link.links[process] \ {wrapped}],
-        totalDrops |-> link.totalDrops]
+Receive(link, sender, receiver, msg) == 
+    [links |-> [link.links EXCEPT ![sender][receiver] = link.links[sender][receiver] \ {msg}],
+     totalDrops |-> link.totalDrops]
 
 =============================================================================

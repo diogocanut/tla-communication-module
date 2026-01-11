@@ -3,28 +3,31 @@ EXTENDS Integers, Sequences
 
 CONSTANT MaxCopies
 
-LOCAL WrapMessage(sender, receiver, msg, numCopy) == 
-    [ sender |-> sender, receiver |-> receiver, message |-> msg, copy |-> numCopy ]
+LOCAL WrapMessage(msg, numCopy) == 
+    [ message |-> msg, copy |-> numCopy ]
 
 LOCAL DuplicableAppendMessage(link, sender, receiver, msg) == 
-    link[receiver] \union { WrapMessage(sender, receiver, msg, copy) : copy \in 1..MaxCopies }
+    link[sender][receiver] \union { WrapMessage(msg, copy) : copy \in 1..MaxCopies }
 
 LOCAL DuplicableSend(link, sender, receiver, msg) == 
-    [link EXCEPT ![receiver] = DuplicableAppendMessage(link, sender, receiver, msg)]
+    [link EXCEPT ![sender][receiver] = DuplicableAppendMessage(link, sender, receiver, msg)]
 
 LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
 
-StubbornLink(processes) == [ p \in processes |-> {} ]
+StubbornLink(senders, receivers) == 
+    [ s \in senders |-> [ r \in receivers |-> {} ] ]
 
-HasMessage(link, process) == link[process] /= {}
+HasMessage(link, sender, receiver) == 
+    link[sender][receiver] /= {}
 
-Messages(link, process) == { UnwrapMessage(m) : m \in link[process] }
+Messages(link, sender, receiver) == 
+    { UnwrapMessage(m) : m \in link[sender][receiver] }
 
 Send(link, sender, receiver, msg) ==
     DuplicableSend(link, sender, receiver, msg)
 
-Receive(link, process, msg) == 
-    LET wrapped == CHOOSE m \in link[process] : UnwrapMessage(m) = msg
-    IN [link EXCEPT ![process] = link[process] \ {wrapped}]
+Receive(link, sender, receiver, msg) == 
+    LET wrapped == CHOOSE m \in link[sender][receiver] : UnwrapMessage(m) = msg
+    IN [link EXCEPT ![sender][receiver] = link[sender][receiver] \ {wrapped}]
 
 =============================================================================

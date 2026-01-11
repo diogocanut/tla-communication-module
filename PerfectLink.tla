@@ -2,25 +2,19 @@
 EXTENDS Integers, Sequences
 
 
-LOCAL WrapMessage(sender, receiver, msg) == 
-    [ sender |-> sender, receiver |-> receiver, message |-> msg ]
+PerfectLink(senders, receivers) == 
+    [ s \in senders |-> [ r \in receivers |-> {} ] ]
 
-LOCAL AppendMessage(link, sender, receiver, msg) == 
-    link[receiver] \cup { WrapMessage(sender, receiver, msg) }
+HasMessage(link, sender, receiver) == 
+    link[sender][receiver] /= {}
 
-LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
-
-PerfectLink(processes) == [ p \in processes |-> {} ]
-
-HasMessage(link, process) == link[process] /= {}
-
-Messages(link, process) == { UnwrapMessage(m) : m \in link[process] }
+Messages(link, sender, receiver) == 
+    link[sender][receiver]
 
 Send(link, sender, receiver, msg) == 
-    [link EXCEPT ![receiver] = AppendMessage(link, sender, receiver, msg)]
+    [link EXCEPT ![sender][receiver] = link[sender][receiver] \cup {msg}]
 
-Receive(link, process, msg) == 
-    LET wrapped == CHOOSE m \in link[process] : UnwrapMessage(m) = msg
-    IN [link EXCEPT ![process] = link[process] \ {wrapped}]
+Receive(link, sender, receiver, msg) == 
+    [link EXCEPT ![sender][receiver] = link[sender][receiver] \ {msg}]
 
 =============================================================================

@@ -10,7 +10,7 @@ vars == <<link, counter, sent, received, receivedOrdered>>
 MessagesToSend == 1 .. totalCounter
 
 Init ==
-  /\ link = PerfectLink(Processes)
+  /\ link = PerfectLink(Processes, Processes)
   /\ counter = 0
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]
@@ -28,21 +28,23 @@ ProcessSend ==
          /\ UNCHANGED <<received, receivedOrdered>>
 
 ProcessReceive ==
-  \E p \in Processes:
-    /\ HasMessage(link, p)
-    /\ \E m \in Messages(link, p):
-        /\ link' = Receive(link, p, m)
-        /\ received' =
-             [received EXCEPT ![p] =
-                received[p] \cup {m}]
-        /\ receivedOrdered' =
-             [receivedOrdered EXCEPT ![p] =
-                Append(receivedOrdered[p], m)]
-        /\ UNCHANGED <<counter, sent>>
+  \E s \in Processes:
+    \E r \in Processes:
+      /\ s # r
+      /\ HasMessage(link, s, r)
+      /\ \E m \in Messages(link, s, r):
+          /\ link' = Receive(link, s, r, m)
+          /\ received' =
+               [received EXCEPT ![r] =
+                  received[r] \cup {m}]
+          /\ receivedOrdered' =
+               [receivedOrdered EXCEPT ![r] =
+                  Append(receivedOrdered[r], m)]
+          /\ UNCHANGED <<counter, sent>>
 
 Termination ==
   /\ counter = totalCounter
-  /\ \A p \in Processes: ~HasMessage(link, p)
+  /\ \A s \in Processes: \A r \in Processes: ~HasMessage(link, s, r)
   /\ UNCHANGED vars
 
 Next ==
