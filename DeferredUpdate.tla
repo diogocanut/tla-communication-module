@@ -96,13 +96,12 @@ TransactionRead(t, op, s) ==
        /\ pendingRead' = [pendingRead EXCEPT ![t] = 1]
        /\ UNCHANGED <<db, s2c, abcastQueue, outcomes, operations, writeSet, readSet, versions, pc, sent, received, decided>>
 
-    \/ /\ PLF!HasMessage(s2c, s, t)
-       /\ LET msg == PLF!Message(s2c, s, t) IN
-            /\ s2c' = PLF!Receive(s2c, s, t)
-            /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<msg.key, msg.value, msg.version>>)]
-            /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-            /\ pendingRead' = [pendingRead EXCEPT ![t] = NULL]
-       /\ UNCHANGED <<db, c2s, abcastQueue, outcomes, operations, writeSet, versions, sent, received, decided>>
+  \/ \E msg \in PLF!Messages(s2c, s, t):
+    /\ s2c' = PLF!Receive(s2c, s, t)
+    /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<msg.key, msg.value, msg.version>>)]
+    /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
+    /\ pendingRead' = [pendingRead EXCEPT ![t] = NULL]
+    /\ UNCHANGED <<db, c2s, abcastQueue, outcomes, operations, writeSet, versions, sent, received, decided>>
 
 TransactionAbort(t) ==
     /\ outcomes' = [outcomes EXCEPT ![t] = "aborted"]
@@ -137,56 +136,53 @@ ApplyWrites(db_s, ws) ==
     ]
 
 ServerApplyCommit(s) ==
-    /\ ABC!HasMessage(abcastQueue, "g1", s) 
-    /\ LET tx == ABC!Message(abcastQueue, "g1", s) IN
-        /\ abcastQueue' = ABC!Deliver(abcastQueue, "g1", s)
-        /\ received' = [received EXCEPT ![tx.transaction] = {tx} 
-                            \cup received[tx.transaction]]
-        /\ IF Valid(tx, s)
-            THEN 
-                /\ db' = [db EXCEPT ![s] = ApplyWrites(db[s], tx.ws)]
-                /\ s2c' = PLF!Send( s2c, s, tx.transaction,
-                        [ type    |-> "commitResponse",
-                          outcome |-> "committed"])
-                /\ decided' = [decided EXCEPT ![s][tx.transaction] = "committed"]
-            ELSE
-                /\ UNCHANGED db
-                /\ s2c' = PLF!Send(s2c, s, tx.transaction,
-                        [ type    |-> "commitResponse",
-                          outcome |-> "aborted"])
-                /\ decided' = [decided EXCEPT ![s][tx.transaction] = "aborted"]
-        /\ UNCHANGED << c2s, writeSet, readSet, versions,
-                        operations, pc, pendingRead, outcomes, sent >>
+  \E tx \in ABC!Messages(abcastQueue, "g1", s):
+    /\ abcastQueue' = ABC!Deliver(abcastQueue, "g1", s)
+    /\ received' = [received EXCEPT ![tx.transaction] = {tx} 
+              \cup received[tx.transaction]]
+    /\ IF Valid(tx, s)
+      THEN 
+        /\ db' = [db EXCEPT ![s] = ApplyWrites(db[s], tx.ws)]
+        /\ s2c' = PLF!Send( s2c, s, tx.transaction,
+            [ type    |-> "commitResponse",
+              outcome |-> "committed"])
+        /\ decided' = [decided EXCEPT ![s][tx.transaction] = "committed"]
+      ELSE
+        /\ UNCHANGED db
+        /\ s2c' = PLF!Send(s2c, s, tx.transaction,
+            [ type    |-> "commitResponse",
+              outcome |-> "aborted"])
+        /\ decided' = [decided EXCEPT ![s][tx.transaction] = "aborted"]
+    /\ UNCHANGED << c2s, writeSet, readSet, versions,
+            operations, pc, pendingRead, outcomes, sent >>
 
 TransactionOutcome(t) ==
-    /\ t \in Transactions
-    /\ outcomes[t] = "pending"
-    /\ \E s \in Servers:
-        /\ PLF!HasMessage(s2c, s, t)
-        /\ LET msg == PLF!Message(s2c, s, t) IN
-               /\ s2c' = PLF!Receive(s2c, s, t)
-               /\ msg.type = "commitResponse"
-               /\ outcomes' = [outcomes EXCEPT ![t] = msg.outcome]
-               /\ UNCHANGED <<db, c2s, abcastQueue, writeSet, readSet, versions, pc, operations, pendingRead, sent, received, decided>>
+  /\ t \in Transactions
+  /\ outcomes[t] = "pending"
+  /\ \E s \in Servers:
+    \E msg \in PLF!Messages(s2c, s, t):
+      /\ s2c' = PLF!Receive(s2c, s, t)
+      /\ msg.type = "commitResponse"
+      /\ outcomes' = [outcomes EXCEPT ![t] = msg.outcome]
+      /\ UNCHANGED <<db, c2s, abcastQueue, writeSet, readSet, versions, pc, operations, pendingRead, sent, received, decided>>
 
 ServerRespondRead(s) ==
-    \E t \in DOMAIN c2s :
-        /\ PLF!HasMessage(c2s, t, s)
-        /\ LET msg == PLF!Message(c2s, t, s) IN
-               /\ c2s' = PLF!Receive(c2s, t, s)
-               /\ IF msg.type = "read"
-                  THEN
-                      LET k == msg.key IN
-                      LET response == [
-                          type    |-> "readResponse",
-                          key     |-> k,
-                          value   |-> db[s][k].val,
-                          version |-> db[s][k].ver
-                      ] IN
-                      /\ s2c' = PLF!Send(s2c, s, t, response)
-                  ELSE
-                      /\ UNCHANGED s2c
-               /\ UNCHANGED <<db, abcastQueue, outcomes, writeSet, readSet, versions, operations, pc, pendingRead, sent, received, decided>>
+  \E t \in DOMAIN c2s :
+    \E msg \in PLF!Messages(c2s, t, s):
+      /\ c2s' = PLF!Receive(c2s, t, s)
+      /\ IF msg.type = "read"
+         THEN
+           LET k == msg.key IN
+           LET response == [
+             type    |-> "readResponse",
+             key     |-> k,
+             value   |-> db[s][k].val,
+             version |-> db[s][k].ver
+           ] IN
+           /\ s2c' = PLF!Send(s2c, s, t, response)
+         ELSE
+           /\ UNCHANGED s2c
+      /\ UNCHANGED <<db, abcastQueue, outcomes, writeSet, readSet, versions, operations, pc, pendingRead, sent, received, decided>>
 
 Terminating ==
     /\ \A t \in Transactions: (outcomes[t] = "committed" \/ outcomes[t] = "aborted")
