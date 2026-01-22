@@ -27,10 +27,9 @@ SendP2 ==
 
 DeliverOne ==
   \E p \in Processes:
-    /\ HasMessage(channel, "g1", p)
-    /\ \E m \in Messages(channel, "g1", p):
+    \E m \in Messages(channel, "g1", p):
         /\ channel' = Deliver(channel, "g1", p, m)
-    /\ UNCHANGED <<counter>>
+        /\ UNCHANGED <<counter>>
 
 Next ==
   \/ SendP1

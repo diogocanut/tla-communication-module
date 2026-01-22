@@ -18,9 +18,6 @@ LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
 Channel(groups, processes) == 
   [links |-> InitChannel(groups, processes)]
 
-HasMessage(channel, group, process) ==
-  channel.links[group][process] /= {}
-
 Messages(channel, group, process) ==
   { UnwrapMessage(m) : m \in channel.links[group][process] }
 
