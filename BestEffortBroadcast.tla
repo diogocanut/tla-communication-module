@@ -6,15 +6,8 @@ CONSTANT MaxDrops
 LOCAL InitChannel(groups, processes) ==
   [g \in groups |-> [ p \in processes |-> {} ]]
 
-LOCAL WrapMessage(sender, receiver, msg) ==
-  [sender |-> sender, receiver |-> receiver, message |-> msg]
-
-LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
-
-LOCAL AppendMessage(channel, sender, group, receiver, msg) ==
-  channel[group][receiver] \union {
-    WrapMessage(sender, receiver, msg)
-  }
+LOCAL AppendMessage(channel, group, receiver, msg) ==
+  channel[group][receiver] \union {msg}
 
 LOCAL IsReceiverToDrop(p, receiversToDrop) == 
   p \in receiversToDrop
@@ -25,12 +18,12 @@ LOCAL CountDrops(receiversToDrop) ==
 LOCAL CanDrop(receiversToDrop, totalDrops) ==
   (CountDrops(receiversToDrop) + totalDrops) <= MaxDrops
 
-LOCAL BroadcastToGroup(channel, group, sender, msg, receiversToDrop) ==
+LOCAL BroadcastToGroup(channel, group, msg, receiversToDrop) ==
   [ p \in DOMAIN channel.links[group] |->
     IF IsReceiverToDrop(p, receiversToDrop) THEN
       channel.links[group][p]
     ELSE
-      AppendMessage(channel.links, sender, group, p, msg)
+      AppendMessage(channel.links, group, p, msg)
   ]
 
 LOCAL UpdateChannelLinks(channel, group, newGroupLinks) ==
@@ -42,10 +35,10 @@ Channel(groups, processes) ==
   [links |-> InitChannel(groups, processes), totalDrops |-> 0]
 
 Messages(channel, group, process) ==
-  { UnwrapMessage(m) : m \in channel.links[group][process] }
+  channel.links[group][process]
 
 LOCAL BroadcastWithDrops(channel, group, sender, msg, receiversToDrop) ==
-  LET newGroupLinks == BroadcastToGroup(channel, group, sender, msg, receiversToDrop)
+  LET newGroupLinks == BroadcastToGroup(channel, group, msg, receiversToDrop)
       actualDrops == CountDrops(receiversToDrop)
   IN
   [
@@ -61,10 +54,9 @@ Broadcast(channel, group, sender, msg) ==
                             CanDrop(r, channel.totalDrops) } }
 
 Deliver(channel, group, process, msg) ==
-  LET wrapped == CHOOSE m \in channel.links[group][process] : UnwrapMessage(m) = msg
-  IN [
+  [
     links |-> [ channel.links EXCEPT
-                  ![group][process] = channel.links[group][process] \ {wrapped}
+                  ![group][process] = channel.links[group][process] \ {msg}
               ],
     totalDrops |-> channel.totalDrops
   ]

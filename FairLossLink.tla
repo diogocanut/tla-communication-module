@@ -8,8 +8,10 @@ LOCAL InitLink(senders, receivers) ==
 
 LOCAL ShouldDrop(link) == link.totalDrops < MaxDrops
 
+LOCAL AppendMessage(set, msg) == set \union {msg}
+
 LOCAL ReliableSend(link, sender, receiver, msg) == [
-    links |-> [link.links EXCEPT ![sender][receiver] = link.links[sender][receiver] \union {msg}],
+    links |-> [link.links EXCEPT ![sender][receiver] = AppendMessage(@, msg)],
     totalDrops |-> link.totalDrops
 ]
 

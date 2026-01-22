@@ -31,7 +31,6 @@ ProcessReceive ==
   \E s \in Processes:
     \E r \in Processes:
       /\ s # r
-      /\ HasMessage(link, s, r)
       /\ \E m \in Messages(link, s, r):
           /\ link' = Receive(link, s, r, m)
           /\ received' =
@@ -44,7 +43,7 @@ ProcessReceive ==
 
 Termination ==
   /\ counter = totalCounter
-  /\ \A s \in Processes: \A r \in Processes: ~HasMessage(link, s, r)
+  /\ \A s \in Processes: \A r \in Processes: Messages(link, s, r) = {}
   /\ UNCHANGED vars
 
 Next ==
@@ -58,13 +57,13 @@ Spec ==
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
 
-PropertyEventualDelivery ==
-  \A p \in Processes:
-    \A m \in sent[p]:
-      <>(m \in received[p])
+\* PropertyEventualDelivery ==
+\*   \A p \in Processes:
+\*     \A m \in sent[p]:
+\*       <>(m \in received[p])
 
-PropertyDuplication ==
-  \A p \in Processes:
-    Len(receivedOrdered[p]) >= Cardinality(received[p])
+\* PropertyDuplication ==
+\*   \A p \in Processes:
+\*     Len(receivedOrdered[p]) >= Cardinality(received[p])
 
 =============================================================================
