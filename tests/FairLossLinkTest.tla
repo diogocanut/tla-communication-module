@@ -1,7 +1,7 @@
---------------------------- MODULE PerfectLinkTest ---------------------------
-EXTENDS Integers, Sequences, TLC, PerfectLink
+--------------------------- MODULE FairLossLinkTest ---------------------------
+EXTENDS Integers, Sequences, TLC, FairLossLink
 
-CONSTANTS Processes, totalCounter
+CONSTANTS Processes, totalCounter, MaxDrops
 
 VARIABLES link, counter, sent, received, receivedOrdered
 
@@ -10,7 +10,7 @@ vars == <<link, counter, sent, received, receivedOrdered>>
 MessagesToSend == 1 .. totalCounter
 
 Init ==
-  /\ link = PerfectLink(Processes, Processes)
+  /\ link = FairLossLink(Processes, Processes)
   /\ counter = 0
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]
@@ -22,7 +22,7 @@ ProcessSend ==
       /\ s # r
       /\ counter < totalCounter
       /\ LET msg == counter + 1 IN
-         /\ link' = Send(link, s, r, msg)
+         /\ link' \in Send(link, s, r, msg)
          /\ counter' = counter + 1
          /\ sent' = [sent EXCEPT ![s] = sent[s] \cup {msg}]
          /\ UNCHANGED <<received, receivedOrdered>>
@@ -56,5 +56,16 @@ Spec ==
        /\ WF_vars(Next)
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
+
+PropertySomeDelivery ==
+  <>(received # [p \in Processes |-> {}])
+
+PropertyMaxDropsRespected ==
+  [](link.totalDrops <= MaxDrops)
+
+PropertyEventualDeliveryWhenNoDrops ==
+  [](link.totalDrops = MaxDrops =>
+      \A s, r \in Processes: \A m \in sent[s]:
+        <>(m \in received[r] \/ s = r))
 
 =============================================================================

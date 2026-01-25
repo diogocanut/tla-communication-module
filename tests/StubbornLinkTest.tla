@@ -1,7 +1,7 @@
---------------------------- MODULE PerfectLinkTest ---------------------------
-EXTENDS Integers, Sequences, TLC, PerfectLink
+--------------------------- MODULE StubbornLinkTest ---------------------------
+EXTENDS Integers, Sequences, TLC, StubbornLink
 
-CONSTANTS Processes, totalCounter
+CONSTANTS Processes, totalCounter, MaxCopies
 
 VARIABLES link, counter, sent, received, receivedOrdered
 
@@ -10,7 +10,7 @@ vars == <<link, counter, sent, received, receivedOrdered>>
 MessagesToSend == 1 .. totalCounter
 
 Init ==
-  /\ link = PerfectLink(Processes, Processes)
+  /\ link = StubbornLink(Processes, Processes)
   /\ counter = 0
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]
@@ -56,5 +56,14 @@ Spec ==
        /\ WF_vars(Next)
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
+
+\* PropertyEventualDelivery ==
+\*   \A p \in Processes:
+\*     \A m \in sent[p]:
+\*       <>(m \in received[p])
+
+\* PropertyDuplication ==
+\*   \A p \in Processes:
+\*     Len(receivedOrdered[p]) >= Cardinality(received[p])
 
 =============================================================================
