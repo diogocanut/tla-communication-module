@@ -1,11 +1,11 @@
 --------------------------- MODULE FairLossLinkTest ---------------------------
 EXTENDS Integers, Sequences, TLC, FairLossLink
 
-CONSTANTS Processes, totalCounter, MaxDrops
+CONSTANTS Processes, totalCounter
 
-VARIABLES link, counter, sent, received, receivedOrdered
+VARIABLES link, counter, sent, received, receivedOrdered, reliablySent
 
-vars == <<link, counter, sent, received, receivedOrdered>>
+vars == <<link, counter, sent, received, receivedOrdered, reliablySent>>
 
 MessagesToSend == 1 .. totalCounter
 
@@ -15,6 +15,7 @@ Init ==
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]
   /\ receivedOrdered = [p \in Processes |-> <<>>]
+  /\ reliablySent = [s \in Processes |-> [r \in Processes |-> {}]]
 
 ProcessSend ==
   \E s \in Processes:
@@ -25,6 +26,11 @@ ProcessSend ==
          /\ link' \in Send(link, s, r, msg)
          /\ counter' = counter + 1
          /\ sent' = [sent EXCEPT ![s] = sent[s] \cup {msg}]
+         /\ reliablySent' =
+              [reliablySent EXCEPT ![s][r] =
+                 IF link.totalDrops = MaxDrops
+                 THEN reliablySent[s][r] \cup {msg}
+                 ELSE reliablySent[s][r]]
          /\ UNCHANGED <<received, receivedOrdered>>
 
 ProcessReceive ==
@@ -39,7 +45,7 @@ ProcessReceive ==
           /\ receivedOrdered' =
                [receivedOrdered EXCEPT ![r] =
                   Append(receivedOrdered[r], m)]
-          /\ UNCHANGED <<counter, sent>>
+          /\ UNCHANGED <<counter, sent, reliablySent>>
 
 Termination ==
   /\ counter = totalCounter
@@ -57,15 +63,21 @@ Spec ==
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
 
-PropertySomeDelivery ==
+\* Fair Loss Link properties (Cachin, Guerraoui & Rodrigues)
+
+\* Liveness witness: at least one message is eventually delivered.
+PropertyEventualDelivery ==
   <>(received # [p \in Processes |-> {}])
 
+\* Implementation constraint: total drops stay within configured bound.
 PropertyMaxDropsRespected ==
   [](link.totalDrops <= MaxDrops)
 
-PropertyEventualDeliveryWhenNoDrops ==
-  [](link.totalDrops = MaxDrops =>
-      \A s, r \in Processes: \A m \in sent[s]:
-        <>(m \in received[r] \/ s = r))
+\* (FAIR LOSS) Messages sent while the drop budget is already exhausted are eventually received.
+\* This is a finite-model approximation of the Fair Loss property.
+PropertyFairLoss ==
+  \A s, r \in Processes:
+    \A m \in MessagesToSend:
+      [](m \in reliablySent[s][r] => <>(m \in received[r]))
 
 =============================================================================

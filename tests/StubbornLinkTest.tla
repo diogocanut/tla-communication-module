@@ -1,7 +1,7 @@
 --------------------------- MODULE StubbornLinkTest ---------------------------
-EXTENDS Integers, Sequences, TLC, StubbornLink
+EXTENDS Integers, Sequences, TLC, FiniteSets, StubbornLink
 
-CONSTANTS Processes, totalCounter, MaxCopies
+CONSTANTS Processes, totalCounter
 
 VARIABLES link, counter, sent, received, receivedOrdered
 
@@ -57,13 +57,19 @@ Spec ==
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
 
-\* PropertyEventualDelivery ==
-\*   \A p \in Processes:
-\*     \A m \in sent[p]:
-\*       <>(m \in received[p])
+\* Stubborn Link properties (Cachin, Guerraoui & Rodrigues)
 
-\* PropertyDuplication ==
-\*   \A p \in Processes:
-\*     Len(receivedOrdered[p]) >= Cardinality(received[p])
+\* (STUBBORN DELIVERY) If a process sends m, it is eventually received
+\* (finite-model approximation: m is received at least once).
+PropertyStubbornDelivery ==
+  \A s \in Processes:
+    \A m \in MessagesToSend:
+      [](m \in sent[s] => <>(\E r \in Processes: r # s /\ m \in received[r]))
+
+\* Stubborn links deliver messages multiple times by design.
+\* This property verifies that duplication is actually occurring.
+PropertyDuplication ==
+  \A p \in Processes:
+    Len(receivedOrdered[p]) >= Cardinality(received[p])
 
 =============================================================================

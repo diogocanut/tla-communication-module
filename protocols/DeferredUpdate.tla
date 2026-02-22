@@ -205,17 +205,17 @@ Spec ==
          SF_vars(ServerApplyCommit(s))
        /\ SF_vars(ServerRespondRead(s))
 
-\* abcast properties
+\* Total Order Broadcast properties (Defago 1998)
 
 ValidMessageDelivered(t) ==
   \A m \in sent[t]: m \in received[t]
 
-\* Validaty
-PropertyAmcValidity ==
+\* (VALIDITY) If a correct process TO-broadcasts m, it eventually TO-delivers m.
+PropertyValidity ==
   \A t \in Transactions: []<>(ValidMessageDelivered(t))
 
-\* No Creation
-PropertyAmcNoCreation ==
+\* (UNIFORM INTEGRITY) A process TO-delivers m only if m was previously TO-broadcast.
+PropertyUniformIntegrity ==
   \A t \in Transactions:
     \A m \in received[t]:
       \E t2 \in Transactions: m \in sent[t2]
@@ -240,7 +240,8 @@ PropertyTransactionTermination ==
 ServerFinished(s, t) ==
   decided[s][t] = "committed" \/ decided[s][t] = "aborted"
   
-\* Uniform total order
+\* (UNIFORM TOTAL ORDER) If servers s1 and s2 both decide on transactions t1 and t2,
+\* then s1 decides t1 before t2 iff s2 does.
 PropertyUniformTotalOrder ==
   \A s1, s2 \in Servers:
     \A t1, t2 \in Transactions:

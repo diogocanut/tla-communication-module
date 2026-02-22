@@ -28,10 +28,11 @@ ProcessSend ==
 ProcessReceive ==
     \E p \in Processes:
       /\ HasMessage(channel, "g1", p)
-      /\ received' = [received EXCEPT ![p] = received[p] \cup {Message(channel, "g1", p)}]
-      /\ receivedOrdered' = [receivedOrdered EXCEPT ![p] = Append(receivedOrdered[p], Message(channel, "g1", p))]
-      /\ channel' = Deliver(channel, "g1", p)
-      /\ UNCHANGED <<counter, sent>>
+      /\ \E m \in Messages(channel, "g1", p):
+          /\ received' = [received EXCEPT ![p] = received[p] \cup {m}]
+          /\ receivedOrdered' = [receivedOrdered EXCEPT ![p] = Append(receivedOrdered[p], m)]
+          /\ channel' = Deliver(channel, "g1", p)
+          /\ UNCHANGED <<counter, sent>>
 
 Termination ==
   counter = totalCounter /\ channel["g1"]["p1"] = <<>> /\ channel["g1"]["p2"] = <<>>
@@ -48,13 +49,15 @@ Spec == Init /\ [][Next]_vars
              /\ SF_vars(ProcessReceive)
 
 
-\* Broadcast properties
+\* Total Order Broadcast properties (Defago 1998)
 
+\* (VALIDITY) If a correct process TO-broadcasts m, it eventually TO-delivers m.
 PropertyValidity ==
   \A p \in Processes:
     \A m \in MessagesToSend:
       [](m \in sent[p] => <>(m \in received[p]))
 
+\* (UNIFORM AGREEMENT) If a process TO-delivers m, all correct processes eventually TO-deliver m.
 PropertyUniformAgreement ==
   \A m \in MessagesToSend:
     \A p1 \in Processes:
@@ -63,6 +66,14 @@ PropertyUniformAgreement ==
 Delivered(p, m) ==
   \E i \in 1..Len(receivedOrdered[p]): receivedOrdered[p][i] = m
 
+\* (UNIFORM INTEGRITY) Part 1: Every process TO-delivers m at most once.
+NoDuplicates(seq) ==
+  \A i, j \in 1..Len(seq): i /= j => seq[i] /= seq[j]
+
+InvariantUniformIntegrityAtMostOnce ==
+  \A p \in Processes: NoDuplicates(receivedOrdered[p])
+
+\* (UNIFORM INTEGRITY) Part 2: A process TO-delivers m only if m was previously TO-broadcast.
 PropertyUniformIntegrity ==
   \A p \in Processes:
     \A m \in MessagesToSend:
@@ -76,19 +87,13 @@ DeliveredBefore(p, m1, m2) ==
   Delivered(p, m1) /\ Delivered(p, m2) /\
   IndexOf(receivedOrdered[p], m1) < IndexOf(receivedOrdered[p], m2)
 
+\* (UNIFORM TOTAL ORDER) If p and q both TO-deliver m and m', then p delivers m before m' iff q does.
 PropertyUniformTotalOrder ==
   \A m1, m2 \in MessagesToSend :
     \A p1, p2 \in Processes :
       (m1 # m2) /\ (p1 # p2) =>
         []( Delivered(p1,m1) /\ Delivered(p1,m2) /\ DeliveredBefore(p1,m1,m2)
             => <>DeliveredBefore(p2,m1,m2) )
-
-
-NoDuplicates(seq) ==
-  \A i, j \in 1..Len(seq): i /= j => seq[i] /= seq[j]
-
-InvariantNoDuplicateDeliveries ==
-  \A p \in Processes: NoDuplicates(receivedOrdered[p])
 
 
 =============================================================================
