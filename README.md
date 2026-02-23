@@ -12,7 +12,7 @@ protocols/          ← case studies built on top of the core modules
 
 ## Running
 
-### VS Code (recommended)
+### VS Code
 
 1. Install the [TLA+ extension](https://marketplace.visualstudio.com/items?itemName=tlaplus.vscode-ide) (`tlaplus.vscode-ide`).
 2. Add a `.vscode/settings.json` file at the project root with the following content:
@@ -26,8 +26,6 @@ protocols/          ← case studies built on top of the core modules
 ```
 
 Replace `/absolute/path/to/this/project` with the actual absolute path where you cloned the repository.
-
-Note: `tlaplus.moduleSearchPaths` expects real paths (it does not expand variables such as `${workspaceFolder}` in all environments).
 
 3. Open any spec under `tests/` or `protocols/` and run **TLA+: Check model** (Command Palette).
 
