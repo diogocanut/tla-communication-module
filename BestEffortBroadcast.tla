@@ -1,7 +1,7 @@
 ------------------------- MODULE BestEffortBroadcast -------------------------
 EXTENDS Integers, FiniteSets, Sequences
 
-CONSTANT MaxDrops
+CONSTANT MaxCrashes
 
 LOCAL InitChannel(groups, processes) ==
   [g \in groups |-> [ p \in processes |-> {} ]]
@@ -9,55 +9,62 @@ LOCAL InitChannel(groups, processes) ==
 LOCAL AppendMessage(channel, group, receiver, msg) ==
   channel[group][receiver] \union {msg}
 
-LOCAL IsReceiverToDrop(p, receiversToDrop) == 
-  p \in receiversToDrop
-
-LOCAL CountDrops(receiversToDrop) == 
-  Cardinality(receiversToDrop)
-
-LOCAL CanDrop(receiversToDrop, totalDrops) ==
-  (CountDrops(receiversToDrop) + totalDrops) <= MaxDrops
-
-LOCAL BroadcastToGroup(channel, group, msg, receiversToDrop) ==
-  [ p \in DOMAIN channel.links[group] |->
-    IF IsReceiverToDrop(p, receiversToDrop) THEN
-      channel.links[group][p]
-    ELSE
-      AppendMessage(channel.links, group, p, msg)
-  ]
-
 LOCAL UpdateChannelLinks(channel, group, newGroupLinks) ==
   [ g \in DOMAIN channel.links |->
     IF g = group THEN newGroupLinks ELSE channel.links[g]
   ]
 
 Channel(groups, processes) ==
-  [links |-> InitChannel(groups, processes), totalDrops |-> 0]
+  [links |-> InitChannel(groups, processes), crashed |-> {}]
+
+IsCrashed(channel, process) ==
+  process \in channel.crashed
+
+CanCrash(channel) ==
+  Cardinality(channel.crashed) < MaxCrashes
+
+Crash(channel, process) ==
+  [channel EXCEPT !.crashed = channel.crashed \union {process}]
 
 Messages(channel, group, process) ==
-  channel.links[group][process]
+  IF IsCrashed(channel, process) THEN {}
+  ELSE channel.links[group][process]
 
-LOCAL BroadcastWithDrops(channel, group, sender, msg, receiversToDrop) ==
-  LET newGroupLinks == BroadcastToGroup(channel, group, msg, receiversToDrop)
-      actualDrops == CountDrops(receiversToDrop)
-  IN
-  [
-    links |-> UpdateChannelLinks(channel, group, newGroupLinks),
-    totalDrops |-> channel.totalDrops + actualDrops
+LOCAL BroadcastToSubset(channel, group, msg, receivers) ==
+  [ p \in DOMAIN channel.links[group] |->
+    IF p \in receivers THEN
+      AppendMessage(channel.links, group, p, msg)
+    ELSE
+      channel.links[group][p]
   ]
 
-\* Non-deterministic broadcast: returns SET of all possible next channel states
-\* User writes: channel' \in Broadcast(channel, "g1", "p1", "msg")
 Broadcast(channel, group, sender, msg) ==
-  { BroadcastWithDrops(channel, group, sender, msg, receiversToDrop) :
-      receiversToDrop \in { r \in SUBSET DOMAIN channel.links[group] :
-                            CanDrop(r, channel.totalDrops) } }
+  IF IsCrashed(channel, sender) THEN {channel}
+  ELSE
+    LET aliveReceivers == { p \in DOMAIN channel.links[group] :
+                            ~IsCrashed(channel, p) }
+        noCrash ==
+          [
+            links   |-> UpdateChannelLinks(channel, group,
+                           BroadcastToSubset(channel, group, msg, aliveReceivers)),
+            crashed |-> channel.crashed
+          ]
+        crashOutcomes ==
+          IF CanCrash(channel) THEN
+            { [
+                links   |-> UpdateChannelLinks(channel, group,
+                               BroadcastToSubset(channel, group, msg, subset)),
+                crashed |-> channel.crashed \union {sender}
+              ] : subset \in SUBSET aliveReceivers }
+          ELSE {}
+    IN
+    {noCrash} \union crashOutcomes
 
 Deliver(channel, group, process, msg) ==
   [
-    links |-> [ channel.links EXCEPT
-                  ![group][process] = channel.links[group][process] \ {msg}
-              ],
-    totalDrops |-> channel.totalDrops
+    links   |-> [ channel.links EXCEPT
+                    ![group][process] = channel.links[group][process] \ {msg}
+                ],
+    crashed |-> channel.crashed
   ]
 =============================================================================

@@ -1,7 +1,7 @@
 ------------------------- MODULE BestEffortBroadcastTest -------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC
 
-INSTANCE BestEffortBroadcast WITH MaxDrops <- 2
+INSTANCE BestEffortBroadcast WITH MaxCrashes <- 1
 
 CONSTANTS Groups, Processes, totalCounter
 
@@ -10,6 +10,8 @@ VARIABLES channel, counter, sent, received, receivedOrdered
 vars == <<channel, counter, sent, received, receivedOrdered>>
 
 MessagesToSend == 1 .. totalCounter
+
+CorrectProcesses == { p \in Processes : ~IsCrashed(channel, p) }
 
 Init ==
   /\ channel = Channel(Groups, Processes)
@@ -20,8 +22,10 @@ Init ==
 
 ProcessSend ==
   \E p \in Processes:
+    /\ ~IsCrashed(channel, p)
     /\ counter < totalCounter
     /\ LET msg == counter + 1 IN
+        \* Broadcast returns a set of possible next channel states. TLA+ non-deterministically picks one.
        /\ channel' \in Broadcast(channel, "g1", p, msg)
        /\ counter' = counter + 1
        /\ sent' = [sent EXCEPT ![p] = sent[p] \cup {msg}]
@@ -35,14 +39,23 @@ ProcessReceive ==
       /\ receivedOrdered' = [receivedOrdered EXCEPT ![p] = Append(receivedOrdered[p], m)]
       /\ UNCHANGED <<counter, sent>>
 
+\* Crash-stop model from Cachin
+ProcessCrash ==
+  \E p \in Processes:
+    /\ ~IsCrashed(channel, p)
+    /\ CanCrash(channel)
+    /\ channel' = Crash(channel, p)
+    /\ UNCHANGED <<counter, sent, received, receivedOrdered>>
+
 Termination ==
   /\ counter = totalCounter
-  /\ \A p \in Processes: Messages(channel, "g1", p) = {}
+  /\ \A p \in CorrectProcesses: Messages(channel, "g1", p) = {}
   /\ UNCHANGED vars
 
 Next ==
   \/ ProcessSend
   \/ ProcessReceive
+  \/ ProcessCrash
   \/ Termination
 
 Spec ==
@@ -54,8 +67,13 @@ Spec ==
 \* Best-Effort Broadcast properties (Cachin, Guerraoui & Rodrigues)
 
 \* (BEB1 - Validity) If a correct process broadcasts m, every correct process eventually delivers m.
-\* Note: Not checkable in this model — BestEffortBroadcast allows message drops (up to MaxDrops),
-\* so delivery is not guaranteed. Use ReliableBroadcast for delivery guarantees.
+\* A correct process is one that never crashes throughout the entire execution.
+PropertyValidity ==
+  \A p \in Processes:
+    \A m \in MessagesToSend:
+      (m \in sent[p] /\ [](~IsCrashed(channel, p)))
+        => \A q \in Processes:
+             [](~IsCrashed(channel, q)) => <>(m \in received[q])
 
 \* (BEB2 - No Duplication) No message is delivered more than once.
 NoDuplicates(seq) ==
