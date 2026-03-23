@@ -16,6 +16,9 @@ LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
 StubbornLink(senders, receivers) == 
     [ s \in senders |-> [ r \in receivers |-> {} ] ]
 
+HasMessage(link, sender, receiver) ==
+    link[sender][receiver] /= {}
+
 Messages(link, sender, receiver) == 
     { UnwrapMessage(m) : m \in link[sender][receiver] }
 

@@ -11,6 +11,9 @@ LOCAL AppendMessage(channel, group, receiver, msg) ==
 Channel(groups, processes) == 
   [links |-> InitChannel(groups, processes)]
 
+HasMessage(channel, group, process) ==
+  channel.links[group][process] /= {}
+
 Messages(channel, group, process) ==
   channel.links[group][process]
 

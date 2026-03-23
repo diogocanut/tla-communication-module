@@ -33,7 +33,8 @@ ProcessSend ==
 
 ProcessReceive ==
   \E p \in Processes:
-    \E m \in Messages(channel, "g1", p):
+    /\ HasMessage(channel, "g1", p)
+    /\ \E m \in Messages(channel, "g1", p):
       /\ channel' = Deliver(channel, "g1", p, m)
       /\ received' = [received EXCEPT ![p] = received[p] \cup {m}]
       /\ receivedOrdered' = [receivedOrdered EXCEPT ![p] = Append(receivedOrdered[p], m)]
@@ -49,7 +50,7 @@ ProcessCrash ==
 
 Termination ==
   /\ counter = totalCounter
-  /\ \A p \in CorrectProcesses: Messages(channel, "g1", p) = {}
+  /\ \A p \in CorrectProcesses: ~HasMessage(channel, "g1", p)
   /\ UNCHANGED vars
 
 Next ==

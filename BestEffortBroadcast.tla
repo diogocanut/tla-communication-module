@@ -26,6 +26,9 @@ CanCrash(channel) ==
 Crash(channel, process) ==
   [channel EXCEPT !.crashed = channel.crashed \union {process}]
 
+HasMessage(channel, group, process) ==
+  ~IsCrashed(channel, process) /\ channel.links[group][process] /= {}
+
 Messages(channel, group, process) ==
   IF IsCrashed(channel, process) THEN {}
   ELSE channel.links[group][process]

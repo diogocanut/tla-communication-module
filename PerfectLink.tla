@@ -7,6 +7,9 @@ LOCAL AppendMessage(set, msg) == set \cup {msg}
 PerfectLink(senders, receivers) == 
     [ s \in senders |-> [ r \in receivers |-> {} ] ]
 
+HasMessage(link, sender, receiver) ==
+    link[sender][receiver] /= {}
+
 Messages(link, sender, receiver) == 
     link[sender][receiver]
 

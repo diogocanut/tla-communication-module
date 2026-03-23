@@ -22,6 +22,9 @@ LOCAL DropMessage(link) == [
 
 FairLossLink(senders, receivers) == InitLink(senders, receivers)
 
+HasMessage(link, sender, receiver) ==
+    link.links[sender][receiver] /= {}
+
 Messages(link, sender, receiver) == 
     link.links[sender][receiver]
 
