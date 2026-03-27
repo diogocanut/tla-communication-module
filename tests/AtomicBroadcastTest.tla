@@ -1,5 +1,7 @@
 --------------------------- MODULE AtomicBroadcastTest ---------------------------
-EXTENDS Integers, Sequences, TLC, AtomicBroadcast
+EXTENDS Integers, Sequences, FiniteSets, TLC
+
+INSTANCE AtomicBroadcast WITH MaxCrashes <- 1
 
 CONSTANTS Groups, Processes, totalCounter
 
@@ -9,18 +11,21 @@ vars == <<channel, counter, sent, received, receivedOrdered>>
 
 MessagesToSend == 1 .. totalCounter
 
+CorrectProcesses == { p \in Processes : ~IsCrashed(channel, p) }
+
 Init ==
-  channel = Channel(Groups, Processes)
-    /\ counter = 0
-    /\ sent = [p \in Processes |-> {}]
-    /\ received = [p \in Processes |-> {}]
-    /\ receivedOrdered = [p \in Processes |-> <<>>]
+  /\ channel = Channel(Groups, Processes)
+  /\ counter = 0
+  /\ sent = [p \in Processes |-> {}]
+  /\ received = [p \in Processes |-> {}]
+  /\ receivedOrdered = [p \in Processes |-> <<>>]
 
 ProcessSend ==
   \E p \in Processes:
+    /\ ~IsCrashed(channel, p)
     /\ counter < totalCounter
     /\ LET msg == counter + 1 IN
-        /\ channel' = Broadcast(channel, "g1", p, msg)
+        /\ channel' \in Broadcast(channel, "g1", p, msg)
         /\ counter' = counter + 1
         /\ sent' = [sent EXCEPT ![p] = sent[p] \cup {msg}]
         /\ UNCHANGED <<received, receivedOrdered>>
@@ -35,12 +40,22 @@ ProcessReceive ==
           /\ UNCHANGED <<counter, sent>>
 
 Termination ==
-  counter = totalCounter /\ channel["g1"]["p1"] = <<>> /\ channel["g1"]["p2"] = <<>>
+  /\ counter = totalCounter
+  /\ \A p \in CorrectProcesses: ~HasMessage(channel, "g1", p)
   /\ UNCHANGED vars
+
+\* Crash-stop model from Cachin
+ProcessCrash ==
+  \E p \in Processes:
+    /\ ~IsCrashed(channel, p)
+    /\ CanCrash(channel)
+    /\ channel' = Crash(channel, p)
+    /\ UNCHANGED <<counter, sent, received, receivedOrdered>>
 
 Next ==
   \/ ProcessSend
   \/ ProcessReceive
+  \/ ProcessCrash
   \/ Termination
 
 Spec == Init /\ [][Next]_vars
@@ -51,17 +66,20 @@ Spec == Init /\ [][Next]_vars
 
 \* Total Order Broadcast properties (Defago 1998)
 
-\* (VALIDITY) If a correct process TO-broadcasts m, it eventually TO-delivers m.
+\* (VALIDITY) If a correct process TO-broadcasts m, every correct process eventually TO-delivers m.
 PropertyValidity ==
   \A p \in Processes:
     \A m \in MessagesToSend:
-      [](m \in sent[p] => <>(m \in received[p]))
+      (m \in sent[p] /\ [](~IsCrashed(channel, p)))
+        => \A q \in Processes:
+             [](~IsCrashed(channel, q)) => <>(m \in received[q])
 
 \* (UNIFORM AGREEMENT) If a process TO-delivers m, all correct processes eventually TO-deliver m.
 PropertyUniformAgreement ==
   \A m \in MessagesToSend:
-    \A p1 \in Processes:
-      [](m \in received[p1] => \A p2 \in Processes: <>(m \in received[p2]))
+    \A p1, p2 \in Processes:
+      [](~IsCrashed(channel, p2))
+        => [](m \in received[p1] => <>(m \in received[p2]))
 
 Delivered(p, m) ==
   \E i \in 1..Len(receivedOrdered[p]): receivedOrdered[p][i] = m

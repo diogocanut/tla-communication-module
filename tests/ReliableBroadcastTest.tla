@@ -1,7 +1,7 @@
 ------------------------- MODULE ReliableBroadcastTest -------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC
 
-INSTANCE ReliableBroadcast
+INSTANCE ReliableBroadcast WITH MaxCrashes <- 1
 
 CONSTANTS Groups, Processes, totalCounter
 
@@ -10,6 +10,8 @@ VARIABLES channel, counter, sent, received, receivedOrdered
 vars == <<channel, counter, sent, received, receivedOrdered>>
 
 MessagesToSend == 1 .. totalCounter
+
+CorrectProcesses == { p \in Processes : ~IsCrashed(channel, p) }
 
 Init ==
   /\ channel = Channel(Groups, Processes)
@@ -20,9 +22,10 @@ Init ==
 
 ProcessSend ==
   \E p \in Processes:
+    /\ ~IsCrashed(channel, p)
     /\ counter < totalCounter
     /\ LET msg == counter + 1 IN
-       /\ channel' = Broadcast(channel, "g1", p, msg)
+       /\ channel' \in Broadcast(channel, "g1", p, msg)
        /\ counter' = counter + 1
        /\ sent' = [sent EXCEPT ![p] = sent[p] \cup {msg}]
        /\ UNCHANGED <<received, receivedOrdered>>
@@ -38,12 +41,21 @@ ProcessReceive ==
 
 Termination ==
   /\ counter = totalCounter
-  /\ \A p \in Processes: ~HasMessage(channel, "g1", p)
+  /\ \A p \in CorrectProcesses: ~HasMessage(channel, "g1", p)
   /\ UNCHANGED vars
+
+\* Crash-stop model from Cachin
+ProcessCrash ==
+  \E p \in Processes:
+    /\ ~IsCrashed(channel, p)
+    /\ CanCrash(channel)
+    /\ channel' = Crash(channel, p)
+    /\ UNCHANGED <<counter, sent, received, receivedOrdered>>
 
 Next ==
   \/ ProcessSend
   \/ ProcessReceive
+  \/ ProcessCrash
   \/ Termination
 
 Spec ==
@@ -54,11 +66,13 @@ Spec ==
 
 \* Reliable Broadcast properties (Cachin, Guerraoui & Rodrigues)
 
-\* (RB1 - Validity) If a correct process broadcasts m, it eventually delivers m.
+\* (RB1 - Validity) If a correct process broadcasts m, every correct process eventually delivers m.
 PropertyValidity ==
   \A p \in Processes:
     \A m \in MessagesToSend:
-      [](m \in sent[p] => <>(m \in received[p]))
+      (m \in sent[p] /\ [](~IsCrashed(channel, p)))
+        => \A q \in Processes:
+             [](~IsCrashed(channel, q)) => <>(m \in received[q])
 
 \* (RB2 - No Duplication) No message is delivered more than once.
 NoDuplicates(seq) ==
@@ -76,7 +90,8 @@ InvariantNoCreation ==
 \* (RB4 - Agreement) If any correct process delivers m, every correct process eventually delivers m.
 PropertyAgreement ==
   \A m \in MessagesToSend:
-    \A p1 \in Processes:
-      [](m \in received[p1] => \A p2 \in Processes: <>(m \in received[p2]))
+    \A p1, p2 \in Processes:
+      [](~IsCrashed(channel, p2))
+        => [](m \in received[p1] => <>(m \in received[p2]))
 
 =============================================================================

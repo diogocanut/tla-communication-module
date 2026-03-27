@@ -2,7 +2,7 @@
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
 PLF == INSTANCE PerfectLinkFIFO
-ABC == INSTANCE AtomicBroadcast
+ABC == INSTANCE AtomicBroadcast WITH MaxCrashes <- 0
 
 CONSTANTS
     Transactions,
@@ -78,7 +78,7 @@ TransactionCommit(t) ==
             rs            |-> readSet[t],
             ws            |-> writeSet[t]
        ] IN
-        /\ abcastQueue' = ABC!Broadcast(abcastQueue, "g1", t, tx)
+        /\ abcastQueue' \in ABC!Broadcast(abcastQueue, "g1", t, tx)
         /\ sent' = [sent EXCEPT ![t] =  {tx} \cup sent[t]]
         /\ outcomes' = [outcomes EXCEPT ![t] = "pending"]
         /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
@@ -98,11 +98,11 @@ TransactionRead(t, op, s) ==
 
   \/ /\ PLF!HasMessage(s2c, s, t)
      /\ \E msg \in PLF!Messages(s2c, s, t):
-    /\ s2c' = PLF!Receive(s2c, s, t)
-    /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<msg.key, msg.value, msg.version>>)]
-    /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-    /\ pendingRead' = [pendingRead EXCEPT ![t] = NULL]
-    /\ UNCHANGED <<db, c2s, abcastQueue, outcomes, operations, writeSet, versions, sent, received, decided>>
+          /\ s2c' = PLF!Receive(s2c, s, t)
+          /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<msg.key, msg.value, msg.version>>)]
+          /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
+          /\ pendingRead' = [pendingRead EXCEPT ![t] = NULL]
+          /\ UNCHANGED <<db, c2s, abcastQueue, outcomes, operations, writeSet, versions, sent, received, decided>>
 
 TransactionAbort(t) ==
     /\ outcomes' = [outcomes EXCEPT ![t] = "aborted"]
