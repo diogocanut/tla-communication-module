@@ -24,13 +24,14 @@ VARIABLES
     pendingRead,
     sent,
     received,
-    decided
+    decided,
+    decidedOrder
     
 NULL == 0
 
 NoMsg == [transaction |-> "none", rs |-> <<>>, ws |-> [x \in Keys |-> NULL]]
 
-vars == <<db, c2s, s2c, abcastQueue, outcomes, operations, writeSet, readSet, versions, pc, pendingRead, sent, received, decided>>
+vars == <<db, c2s, s2c, abcastQueue, outcomes, operations, writeSet, readSet, versions, pc, pendingRead, sent, received, decided, decidedOrder>>
 
 Init ==
     /\ db = [s \in Servers |-> [k \in Keys |-> [val |-> NULL, ver |-> NULL]]]
@@ -64,13 +65,14 @@ Init ==
     /\ sent = [t \in Transactions |-> {}]
     /\ received = [t \in Transactions |-> {}]
     /\ decided = [s \in Servers |-> [t \in Transactions |-> "none"]]
+    /\ decidedOrder = [s \in Servers |-> <<>>]
 
 HasWritten(t, k) == writeSet[t][k] /= NULL
 
 TransactionWrite(t, k, v) ==
     /\ writeSet' = [writeSet EXCEPT ![t][k] = v]
     /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-    /\ UNCHANGED <<db, c2s, s2c, abcastQueue, outcomes, operations, readSet, versions, pendingRead, sent, received, decided>>
+    /\ UNCHANGED <<db, c2s, s2c, abcastQueue, outcomes, operations, readSet, versions, pendingRead, sent, received, decided, decidedOrder>>
 
 TransactionCommit(t) ==
     /\ LET tx == [
@@ -82,19 +84,19 @@ TransactionCommit(t) ==
         /\ sent' = [sent EXCEPT ![t] =  {tx} \cup sent[t]]
         /\ outcomes' = [outcomes EXCEPT ![t] = "pending"]
         /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-        /\ UNCHANGED <<db, c2s, s2c, operations, writeSet, readSet, versions, pendingRead, received, decided>>
+        /\ UNCHANGED <<db, c2s, s2c, operations, writeSet, readSet, versions, pendingRead, received, decided, decidedOrder>>
 
 TransactionRead(t, op, s) ==
     \/ /\ HasWritten(t, op.key)
        /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<op.key, writeSet[t][op.key], versions[t]>>)]
        /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-       /\ UNCHANGED <<db, c2s, s2c, abcastQueue, outcomes, operations, writeSet, versions, pendingRead, sent, received, decided>>
+       /\ UNCHANGED <<db, c2s, s2c, abcastQueue, outcomes, operations, writeSet, versions, pendingRead, sent, received, decided, decidedOrder>>
 
     \/ /\ ~HasWritten(t, op.key)
        /\ pendingRead[t] = NULL
        /\ c2s' = PLF!Send(c2s, t, s, [type |-> "read", key |-> op.key])
        /\ pendingRead' = [pendingRead EXCEPT ![t] = 1]
-       /\ UNCHANGED <<db, s2c, abcastQueue, outcomes, operations, writeSet, readSet, versions, pc, sent, received, decided>>
+       /\ UNCHANGED <<db, s2c, abcastQueue, outcomes, operations, writeSet, readSet, versions, pc, sent, received, decided, decidedOrder>>
 
   \/ /\ PLF!HasMessage(s2c, s, t)
      /\ \E msg \in PLF!Messages(s2c, s, t):
@@ -102,12 +104,12 @@ TransactionRead(t, op, s) ==
           /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<msg.key, msg.value, msg.version>>)]
           /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
           /\ pendingRead' = [pendingRead EXCEPT ![t] = NULL]
-          /\ UNCHANGED <<db, c2s, abcastQueue, outcomes, operations, writeSet, versions, sent, received, decided>>
+          /\ UNCHANGED <<db, c2s, abcastQueue, outcomes, operations, writeSet, versions, sent, received, decided, decidedOrder>>
 
 TransactionAbort(t) ==
     /\ outcomes' = [outcomes EXCEPT ![t] = "aborted"]
     /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-    /\ UNCHANGED <<db, c2s, s2c, abcastQueue, operations, writeSet, readSet, versions, pendingRead, sent, received, decided>>
+    /\ UNCHANGED <<db, c2s, s2c, abcastQueue, operations, writeSet, readSet, versions, pendingRead, sent, received, decided, decidedOrder>>
 
 TransactionOperation(t) ==
     /\ t \in Transactions
@@ -127,11 +129,11 @@ Valid(tx, s) ==
         LET r == tx.rs[i] IN
         LET k == r[1] IN
         LET ver == r[3] IN
-            db[s][k].ver <= ver
+            db[s][k].ver = ver
 
 ApplyWrites(db_s, ws) ==
     [k \in DOMAIN db_s |->
-        IF k \in DOMAIN ws
+        IF ws[k] /= NULL
         THEN [val |-> ws[k], ver |-> db_s[k].ver + 1]
         ELSE db_s[k]
     ]
@@ -155,6 +157,7 @@ ServerApplyCommit(s) ==
             [ type    |-> "commitResponse",
               outcome |-> "aborted"])
         /\ decided' = [decided EXCEPT ![s][tx.transaction] = "aborted"]
+    /\ decidedOrder' = [decidedOrder EXCEPT ![s] = Append(decidedOrder[s], tx.transaction)]
     /\ UNCHANGED << c2s, writeSet, readSet, versions,
             operations, pc, pendingRead, outcomes, sent >>
 
@@ -167,7 +170,7 @@ TransactionOutcome(t) ==
       /\ s2c' = PLF!Receive(s2c, s, t)
       /\ msg.type = "commitResponse"
       /\ outcomes' = [outcomes EXCEPT ![t] = msg.outcome]
-      /\ UNCHANGED <<db, c2s, abcastQueue, writeSet, readSet, versions, pc, operations, pendingRead, sent, received, decided>>
+      /\ UNCHANGED <<db, c2s, abcastQueue, writeSet, readSet, versions, pc, operations, pendingRead, sent, received, decided, decidedOrder>>
 
 ServerRespondRead(s) ==
   \E t \in DOMAIN c2s :
@@ -186,7 +189,7 @@ ServerRespondRead(s) ==
            /\ s2c' = PLF!Send(s2c, s, t, response)
          ELSE
            /\ UNCHANGED s2c
-      /\ UNCHANGED <<db, abcastQueue, outcomes, writeSet, readSet, versions, operations, pc, pendingRead, sent, received, decided>>
+      /\ UNCHANGED <<db, abcastQueue, outcomes, writeSet, readSet, versions, operations, pc, pendingRead, sent, received, decided, decidedOrder>>
 
 Terminating ==
     /\ \A t \in Transactions: (outcomes[t] = "committed" \/ outcomes[t] = "aborted")
@@ -244,13 +247,25 @@ PropertyTransactionTermination ==
 ServerFinished(s, t) ==
   decided[s][t] = "committed" \/ decided[s][t] = "aborted"
   
+\* Helper: set of elements in a sequence
+SeqRange(seq) == {seq[i] : i \in 1..Len(seq)}
+
+\* Helper: index of an element in a sequence (assumes uniqueness)
+SeqIndex(seq, elem) == CHOOSE i \in 1..Len(seq) : seq[i] = elem
+
 \* (UNIFORM TOTAL ORDER) If servers s1 and s2 both decide on transactions t1 and t2,
 \* then s1 decides t1 before t2 iff s2 does.
 PropertyUniformTotalOrder ==
-  \A s1, s2 \in Servers:
-    \A t1, t2 \in Transactions:
-      [](ServerFinished(s1, t1) => <>ServerFinished(s1, t2)) 
-        => [](ServerFinished(s2, t1) => <>ServerFinished(s2, t2))
+  [](
+    \A s1, s2 \in Servers :
+      \A t1, t2 \in Transactions :
+        (t1 /= t2 /\
+         t1 \in SeqRange(decidedOrder[s1]) /\ t2 \in SeqRange(decidedOrder[s1]) /\
+         t1 \in SeqRange(decidedOrder[s2]) /\ t2 \in SeqRange(decidedOrder[s2]))
+        =>
+        (SeqIndex(decidedOrder[s1], t1) < SeqIndex(decidedOrder[s1], t2)
+         <=> SeqIndex(decidedOrder[s2], t1) < SeqIndex(decidedOrder[s2], t2))
+  )
 
 \* DB1
 PropertyDB1UniformConsistency ==
