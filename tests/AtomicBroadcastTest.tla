@@ -63,6 +63,15 @@ Spec == Init /\ [][Next]_vars
              /\ SF_vars(ProcessSend)
              /\ SF_vars(ProcessReceive)
 
+\* Type invariant
+TypeOK ==
+  /\ counter \in 0..totalCounter
+  /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
+  /\ \A p \in Processes: received[p] \subseteq MessagesToSend
+  /\ channel.crashed \subseteq Processes
+  /\ \A g \in Groups: \A p \in Processes:
+       \A i \in 1..Len(channel.links[g][p]): channel.links[g][p][i] \in MessagesToSend
+
 
 \* Total Order Broadcast properties (Defago 1998)
 

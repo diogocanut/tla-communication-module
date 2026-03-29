@@ -65,6 +65,14 @@ Spec ==
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
 
+\* Type invariant
+TypeOK ==
+  /\ counter \in 0..totalCounter
+  /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
+  /\ \A p \in Processes: received[p] \subseteq MessagesToSend
+  /\ channel.crashed \subseteq Processes
+  /\ \A g \in Groups: \A p \in Processes: channel.links[g][p] \subseteq MessagesToSend
+
 \* Best-Effort Broadcast properties (Cachin, Guerraoui & Rodrigues)
 
 \* (BEB1 - Validity) If a correct process broadcasts m, every correct process eventually delivers m.

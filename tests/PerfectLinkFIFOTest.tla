@@ -1,20 +1,22 @@
---------------------------- MODULE PerfectLinkTest ---------------------------
-EXTENDS Integers, Sequences, TLC, PerfectLink
+------------------------ MODULE PerfectLinkFIFOTest ------------------------
+EXTENDS Integers, Sequences, TLC, PerfectLinkFIFO
 
 CONSTANTS Processes, totalCounter
 
-VARIABLES link, counter, sent, received, receivedOrdered
+VARIABLES link, counter, sent, received, receivedOrdered, sentTo, receivedFrom
 
-vars == <<link, counter, sent, received, receivedOrdered>>
+vars == <<link, counter, sent, received, receivedOrdered, sentTo, receivedFrom>>
 
 MessagesToSend == 1 .. totalCounter
 
 Init ==
-  /\ link = PerfectLink(Processes, Processes)
+  /\ link = PerfectLinkFIFO(Processes, Processes)
   /\ counter = 0
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]
   /\ receivedOrdered = [p \in Processes |-> <<>>]
+  /\ sentTo = [s \in Processes |-> [r \in Processes |-> <<>>]]
+  /\ receivedFrom = [r \in Processes |-> [s \in Processes |-> <<>>]]
 
 ProcessSend ==
   \E s \in Processes:
@@ -25,7 +27,8 @@ ProcessSend ==
          /\ link' = Send(link, s, r, msg)
          /\ counter' = counter + 1
          /\ sent' = [sent EXCEPT ![s] = sent[s] \cup {msg}]
-         /\ UNCHANGED <<received, receivedOrdered>>
+         /\ sentTo' = [sentTo EXCEPT ![s][r] = Append(sentTo[s][r], msg)]
+         /\ UNCHANGED <<received, receivedOrdered, receivedFrom>>
 
 ProcessReceive ==
   \E s \in Processes:
@@ -33,14 +36,17 @@ ProcessReceive ==
       /\ s # r
       /\ HasMessage(link, s, r)
       /\ \E m \in Messages(link, s, r):
-          /\ link' = Receive(link, s, r, m)
+          /\ link' = Receive(link, s, r)
           /\ received' =
                [received EXCEPT ![r] =
                   received[r] \cup {m}]
           /\ receivedOrdered' =
                [receivedOrdered EXCEPT ![r] =
                   Append(receivedOrdered[r], m)]
-          /\ UNCHANGED <<counter, sent>>
+          /\ receivedFrom' =
+               [receivedFrom EXCEPT ![r][s] =
+                  Append(receivedFrom[r][s], m)]
+          /\ UNCHANGED <<counter, sent, sentTo>>
 
 Termination ==
   /\ counter = totalCounter
@@ -58,16 +64,17 @@ Spec ==
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
 
-\* Perfect Link properties (Cachin, Guerraoui & Rodrigues)
+\* Perfect FIFO Link properties (Cachin, Guerraoui & Rodrigues)
 
 \* Type invariant
 TypeOK ==
   /\ counter \in 0..totalCounter
   /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
   /\ \A p \in Processes: received[p] \subseteq MessagesToSend
-  /\ \A s, r \in Processes: link[s][r] \subseteq MessagesToSend
+  /\ \A s, r \in Processes:
+       \A i \in 1..Len(link[s][r]): link[s][r][i] \in MessagesToSend
 
-\* (PL1 - Reliable Delivery) If a correct process sends m, every other process eventually delivers m.
+\* (PL1 - Reliable Delivery) If a process sends m, the receiver eventually delivers m.
 PropertyReliableDelivery ==
   \A s \in Processes:
     \A m \in MessagesToSend:
@@ -85,5 +92,15 @@ InvariantNoCreation ==
   \A p \in Processes:
     \A m \in received[p]:
       \E q \in Processes: m \in sent[q]
+
+\* (FIFO Ordering) Messages from s to r are delivered in the order they were sent.
+\* receivedFrom[r][s] must always be a prefix of sentTo[s][r].
+IsPrefix(a, b) ==
+  /\ Len(a) <= Len(b)
+  /\ \A i \in 1..Len(a): a[i] = b[i]
+
+InvariantFIFOOrdering ==
+  \A s, r \in Processes:
+    s # r => IsPrefix(receivedFrom[r][s], sentTo[s][r])
 
 =============================================================================

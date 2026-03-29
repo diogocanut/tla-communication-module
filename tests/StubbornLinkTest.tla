@@ -58,6 +58,13 @@ Spec ==
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
 
+\* Type invariant
+TypeOK ==
+  /\ counter \in 0..totalCounter
+  /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
+  /\ \A p \in Processes: received[p] \subseteq MessagesToSend
+  /\ \A s, r \in Processes: Messages(link, s, r) \subseteq MessagesToSend
+
 \* Stubborn Link properties (Cachin, Guerraoui & Rodrigues)
 
 \* (STUBBORN DELIVERY) If a process sends m, it is eventually received

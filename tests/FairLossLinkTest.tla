@@ -64,6 +64,15 @@ Spec ==
        /\ SF_vars(ProcessSend)
        /\ SF_vars(ProcessReceive)
 
+\* Type invariant
+TypeOK ==
+  /\ counter \in 0..totalCounter
+  /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
+  /\ \A p \in Processes: received[p] \subseteq MessagesToSend
+  /\ link.totalDrops \in 0..MaxDrops
+  /\ \A s, r \in Processes: link.links[s][r] \subseteq MessagesToSend
+  /\ \A s, r \in Processes: reliablySent[s][r] \subseteq MessagesToSend
+
 \* Fair Loss Link properties (Cachin, Guerraoui & Rodrigues)
 
 \* Liveness witness: at least one message is eventually delivered.
