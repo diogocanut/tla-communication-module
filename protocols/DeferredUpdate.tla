@@ -19,7 +19,6 @@ VARIABLES
     operations,
     writeSet,
     readSet,
-    versions,
     pc,
     pendingRead,
     sent,
@@ -31,7 +30,7 @@ NULL == 0
 
 NoMsg == [transaction |-> "none", rs |-> <<>>, ws |-> [x \in Keys |-> NULL]]
 
-vars == <<db, c2s, s2c, abcastQueue, outcomes, operations, writeSet, readSet, versions, pc, pendingRead, sent, received, decided, decidedOrder>>
+vars == <<db, c2s, s2c, abcastQueue, outcomes, operations, writeSet, readSet, pc, pendingRead, sent, received, decided, decidedOrder>>
 
 Init ==
     /\ db = [s \in Servers |-> [k \in Keys |-> [val |-> NULL, ver |-> NULL]]]
@@ -41,7 +40,6 @@ Init ==
     /\ outcomes = [t \in Transactions |-> "unknown"]
     /\ writeSet = [t \in Transactions |-> [k \in Keys |-> NULL]]
     /\ readSet = [t \in Transactions |-> <<>>]
-    /\ versions = [t \in Transactions |-> NULL]
     /\ pc = [t \in Transactions |-> 1]
     /\ operations = 
         [ t \in Transactions |->
@@ -72,7 +70,7 @@ HasWritten(t, k) == writeSet[t][k] /= NULL
 TransactionWrite(t, k, v) ==
     /\ writeSet' = [writeSet EXCEPT ![t][k] = v]
     /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-    /\ UNCHANGED <<db, c2s, s2c, abcastQueue, outcomes, operations, readSet, versions, pendingRead, sent, received, decided, decidedOrder>>
+    /\ UNCHANGED <<db, c2s, s2c, abcastQueue, outcomes, operations, readSet, pendingRead, sent, received, decided, decidedOrder>>
 
 TransactionCommit(t) ==
     /\ LET tx == [
@@ -84,19 +82,19 @@ TransactionCommit(t) ==
         /\ sent' = [sent EXCEPT ![t] =  {tx} \cup sent[t]]
         /\ outcomes' = [outcomes EXCEPT ![t] = "pending"]
         /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-        /\ UNCHANGED <<db, c2s, s2c, operations, writeSet, readSet, versions, pendingRead, received, decided, decidedOrder>>
+        /\ UNCHANGED <<db, c2s, s2c, operations, writeSet, readSet, pendingRead, received, decided, decidedOrder>>
 
 TransactionRead(t, op, s) ==
     \/ /\ HasWritten(t, op.key)
-       /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<op.key, writeSet[t][op.key], versions[t]>>)]
+       /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<op.key, writeSet[t][op.key], NULL>>)]
        /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-       /\ UNCHANGED <<db, c2s, s2c, abcastQueue, outcomes, operations, writeSet, versions, pendingRead, sent, received, decided, decidedOrder>>
+       /\ UNCHANGED <<db, c2s, s2c, abcastQueue, outcomes, operations, writeSet, pendingRead, sent, received, decided, decidedOrder>>
 
     \/ /\ ~HasWritten(t, op.key)
        /\ pendingRead[t] = NULL
        /\ c2s' = PLF!Send(c2s, t, s, [type |-> "read", key |-> op.key])
        /\ pendingRead' = [pendingRead EXCEPT ![t] = 1]
-       /\ UNCHANGED <<db, s2c, abcastQueue, outcomes, operations, writeSet, readSet, versions, pc, sent, received, decided, decidedOrder>>
+       /\ UNCHANGED <<db, s2c, abcastQueue, outcomes, operations, writeSet, readSet, pc, sent, received, decided, decidedOrder>>
 
   \/ /\ PLF!HasMessage(s2c, s, t)
      /\ \E msg \in PLF!Messages(s2c, s, t):
@@ -104,12 +102,12 @@ TransactionRead(t, op, s) ==
           /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<msg.key, msg.value, msg.version>>)]
           /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
           /\ pendingRead' = [pendingRead EXCEPT ![t] = NULL]
-          /\ UNCHANGED <<db, c2s, abcastQueue, outcomes, operations, writeSet, versions, sent, received, decided, decidedOrder>>
+          /\ UNCHANGED <<db, c2s, abcastQueue, outcomes, operations, writeSet, sent, received, decided, decidedOrder>>
 
 TransactionAbort(t) ==
     /\ outcomes' = [outcomes EXCEPT ![t] = "aborted"]
     /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
-    /\ UNCHANGED <<db, c2s, s2c, abcastQueue, operations, writeSet, readSet, versions, pendingRead, sent, received, decided, decidedOrder>>
+    /\ UNCHANGED <<db, c2s, s2c, abcastQueue, operations, writeSet, readSet, pendingRead, sent, received, decided, decidedOrder>>
 
 TransactionOperation(t) ==
     /\ t \in Transactions
@@ -158,7 +156,7 @@ ServerApplyCommit(s) ==
               outcome |-> "aborted"])
         /\ decided' = [decided EXCEPT ![s][tx.transaction] = "aborted"]
     /\ decidedOrder' = [decidedOrder EXCEPT ![s] = Append(decidedOrder[s], tx.transaction)]
-    /\ UNCHANGED << c2s, writeSet, readSet, versions,
+    /\ UNCHANGED << c2s, writeSet, readSet,
             operations, pc, pendingRead, outcomes, sent >>
 
 TransactionOutcome(t) ==
@@ -170,7 +168,7 @@ TransactionOutcome(t) ==
       /\ s2c' = PLF!Receive(s2c, s, t)
       /\ msg.type = "commitResponse"
       /\ outcomes' = [outcomes EXCEPT ![t] = msg.outcome]
-      /\ UNCHANGED <<db, c2s, abcastQueue, writeSet, readSet, versions, pc, operations, pendingRead, sent, received, decided, decidedOrder>>
+      /\ UNCHANGED <<db, c2s, abcastQueue, writeSet, readSet, pc, operations, pendingRead, sent, received, decided, decidedOrder>>
 
 ServerRespondRead(s) ==
   \E t \in DOMAIN c2s :
@@ -189,7 +187,7 @@ ServerRespondRead(s) ==
            /\ s2c' = PLF!Send(s2c, s, t, response)
          ELSE
            /\ UNCHANGED s2c
-      /\ UNCHANGED <<db, abcastQueue, outcomes, writeSet, readSet, versions, operations, pc, pendingRead, sent, received, decided, decidedOrder>>
+      /\ UNCHANGED <<db, abcastQueue, outcomes, writeSet, readSet, operations, pc, pendingRead, sent, received, decided, decidedOrder>>
 
 Terminating ==
     /\ \A t \in Transactions: (outcomes[t] = "committed" \/ outcomes[t] = "aborted")
