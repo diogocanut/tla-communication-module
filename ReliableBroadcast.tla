@@ -54,10 +54,12 @@ Broadcast(channel, group, sender, msg) ==
     ]
 
 Deliver(channel, group, process, msg) ==
-  [
-    links   |-> [ channel.links EXCEPT
-                    ![group][process] = channel.links[group][process] \ {msg}
-                ],
-    crashed |-> channel.crashed
-  ]
+  IF IsCrashed(channel, process) THEN channel
+  ELSE
+    [
+      links   |-> [ channel.links EXCEPT
+                      ![group][process] = channel.links[group][process] \ {msg}
+                  ],
+      crashed |-> channel.crashed
+    ]
 ==============================================================================

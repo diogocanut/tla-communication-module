@@ -24,17 +24,19 @@ Messages(channel, group, process) ==
   ELSE {Head(channel.links[group][process])}
 
 Deliver(channel, group, process) ==
-  [
-    links   |-> [ g \in DOMAIN channel.links |->
-                    IF g = group THEN
-                      [ p \in DOMAIN channel.links[g] |->
-                          IF p = process THEN Tail(channel.links[g][p])
-                          ELSE channel.links[g][p]
-                      ]
-                    ELSE channel.links[g]
-                ],
-    crashed |-> channel.crashed
-  ]
+  IF IsCrashed(channel, process) THEN channel
+  ELSE
+    [
+      links   |-> [ g \in DOMAIN channel.links |->
+                      IF g = group THEN
+                        [ p \in DOMAIN channel.links[g] |->
+                            IF p = process THEN Tail(channel.links[g][p])
+                            ELSE channel.links[g][p]
+                        ]
+                      ELSE channel.links[g]
+                  ],
+      crashed |-> channel.crashed
+    ]
 
 Broadcast(channel, group, sender, msg) ==
   IF IsCrashed(channel, sender) THEN channel
