@@ -25,7 +25,6 @@ ProcessSend ==
     /\ ~IsCrashed(channel, p)
     /\ counter < totalCounter
     /\ LET msg == counter + 1 IN
-        \* Broadcast returns a set of possible next channel states. TLA+ non-deterministically picks one.
        /\ channel' \in Broadcast(channel, "g1", p, msg)
        /\ counter' = counter + 1
        /\ sent' = [sent EXCEPT ![p] = sent[p] \cup {msg}]

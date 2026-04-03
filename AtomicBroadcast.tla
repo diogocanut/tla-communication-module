@@ -37,31 +37,22 @@ Deliver(channel, group, process) ==
   ]
 
 Broadcast(channel, group, sender, msg) ==
-  IF IsCrashed(channel, sender) THEN {channel}
+  IF IsCrashed(channel, sender) THEN channel
   ELSE
     LET aliveReceivers == { p \in DOMAIN channel.links[group] :
                             ~IsCrashed(channel, p) }
-        noCrash ==
-          [
-            links   |-> [ g \in DOMAIN channel.links |->
-                            IF g = group THEN
-                              [ p \in DOMAIN channel.links[g] |->
-                                  IF p \in aliveReceivers THEN
-                                    Append(channel.links[g][p], msg)
-                                  ELSE channel.links[g][p]
-                              ]
-                            ELSE channel.links[g]
-                          ],
-            crashed |-> channel.crashed
-          ]
-        crashOutcome ==
-          IF CanCrash(channel) THEN
-            {[
-              links   |-> channel.links,
-              crashed |-> channel.crashed \union {sender}
-            ]}
-          ELSE {}
     IN
-    {noCrash} \union crashOutcome
+    [
+      links   |-> [ g \in DOMAIN channel.links |->
+                      IF g = group THEN
+                        [ p \in DOMAIN channel.links[g] |->
+                            IF p \in aliveReceivers THEN
+                              Append(channel.links[g][p], msg)
+                            ELSE channel.links[g][p]
+                        ]
+                      ELSE channel.links[g]
+                  ],
+      crashed |-> channel.crashed
+    ]
 
 =============================================================================

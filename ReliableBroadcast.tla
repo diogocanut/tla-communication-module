@@ -42,25 +42,16 @@ LOCAL BroadcastToAll(channel, group, msg, receivers) ==
   ]
 
 Broadcast(channel, group, sender, msg) ==
-  IF IsCrashed(channel, sender) THEN {channel}
+  IF IsCrashed(channel, sender) THEN channel
   ELSE
     LET aliveReceivers == { p \in DOMAIN channel.links[group] :
                             ~IsCrashed(channel, p) }
-        noCrash ==
-          [
-            links   |-> UpdateChannelLinks(channel, group,
-                           BroadcastToAll(channel, group, msg, aliveReceivers)),
-            crashed |-> channel.crashed
-          ]
-        crashOutcome ==
-          IF CanCrash(channel) THEN
-            {[
-              links   |-> channel.links,
-              crashed |-> channel.crashed \union {sender}
-            ]}
-          ELSE {}
     IN
-    {noCrash} \union crashOutcome
+    [
+      links   |-> UpdateChannelLinks(channel, group,
+                     BroadcastToAll(channel, group, msg, aliveReceivers)),
+      crashed |-> channel.crashed
+    ]
 
 Deliver(channel, group, process, msg) ==
   [

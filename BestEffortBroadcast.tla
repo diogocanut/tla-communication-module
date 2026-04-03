@@ -46,22 +46,12 @@ Broadcast(channel, group, sender, msg) ==
   ELSE
     LET aliveReceivers == { p \in DOMAIN channel.links[group] :
                             ~IsCrashed(channel, p) }
-        noCrash ==
-          [
-            links   |-> UpdateChannelLinks(channel, group,
-                           BroadcastToSubset(channel, group, msg, aliveReceivers)),
-            crashed |-> channel.crashed
-          ]
-        crashOutcomes ==
-          IF CanCrash(channel) THEN
-            { [
-                links   |-> UpdateChannelLinks(channel, group,
-                               BroadcastToSubset(channel, group, msg, subset)),
-                crashed |-> channel.crashed \union {sender}
-              ] : subset \in SUBSET aliveReceivers }
-          ELSE {}
     IN
-    {noCrash} \union crashOutcomes
+    { [
+        links   |-> UpdateChannelLinks(channel, group,
+                       BroadcastToSubset(channel, group, msg, subset)),
+        crashed |-> channel.crashed
+      ] : subset \in SUBSET aliveReceivers }
 
 Deliver(channel, group, process, msg) ==
   [

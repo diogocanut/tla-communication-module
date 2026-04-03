@@ -25,7 +25,7 @@ ProcessSend ==
     /\ ~IsCrashed(channel, p)
     /\ counter < totalCounter
     /\ LET msg == counter + 1 IN
-       /\ channel' \in Broadcast(channel, "g1", p, msg)
+       /\ channel' = Broadcast(channel, "g1", p, msg)
        /\ counter' = counter + 1
        /\ sent' = [sent EXCEPT ![p] = sent[p] \cup {msg}]
        /\ UNCHANGED <<received, receivedOrdered>>

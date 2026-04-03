@@ -25,7 +25,7 @@ ProcessSend ==
     /\ ~IsCrashed(channel, p)
     /\ counter < totalCounter
     /\ LET msg == counter + 1 IN
-        /\ channel' \in Broadcast(channel, "g1", p, msg)
+        /\ channel' = Broadcast(channel, "g1", p, msg)
         /\ counter' = counter + 1
         /\ sent' = [sent EXCEPT ![p] = sent[p] \cup {msg}]
         /\ UNCHANGED <<received, receivedOrdered>>
@@ -118,7 +118,7 @@ DeliveredBefore(p, m1, m2) ==
 PropertyUniformTotalOrder ==
   \A m1, m2 \in MessagesToSend :
     \A p1, p2 \in Processes :
-      (m1 # m2) /\ (p1 # p2) =>
+      (m1 # m2) /\ (p1 # p2) /\ [](~IsCrashed(channel, p2)) =>
         []( Delivered(p1,m1) /\ Delivered(p1,m2) /\ DeliveredBefore(p1,m1,m2)
             => <>DeliveredBefore(p2,m1,m2) )
 
