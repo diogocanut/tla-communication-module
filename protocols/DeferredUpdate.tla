@@ -78,7 +78,7 @@ TransactionCommit(t) ==
             rs            |-> readSet[t],
             ws            |-> writeSet[t]
        ] IN
-        /\ abcastQueue' \in ABC!Broadcast(abcastQueue, "g1", t, tx)
+        /\ abcastQueue' = ABC!Broadcast(abcastQueue, "g1", t, tx)
         /\ sent' = [sent EXCEPT ![t] =  {tx} \cup sent[t]]
         /\ outcomes' = [outcomes EXCEPT ![t] = "pending"]
         /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
