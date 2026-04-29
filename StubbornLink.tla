@@ -1,32 +1,41 @@
 ---------------------------- MODULE StubbornLink ----------------------------
-EXTENDS Integers, Sequences
+EXTENDS Integers, Sequences, FiniteSets
 
-CONSTANT MaxCopies
+CONSTANTS MaxCopies, MaxCrashes
 
-LOCAL WrapMessage(msg, numCopy) == 
+LOCAL WrapMessage(msg, numCopy) ==
     [ message |-> msg, copy |-> numCopy ]
 
 LOCAL AppendMessage(set, msg) == set \union { WrapMessage(msg, copy) : copy \in 1..MaxCopies }
 
-LOCAL DuplicableSend(link, sender, receiver, msg) == 
-    [link EXCEPT ![sender][receiver] = AppendMessage(@, msg)]
-
 LOCAL UnwrapMessage(wrappedMessage) == wrappedMessage.message
 
-StubbornLink(senders, receivers) == 
-    [ s \in senders |-> [ r \in receivers |-> {} ] ]
+StubbornLink(senders, receivers) ==
+    [links |-> [ s \in senders |-> [ r \in receivers |-> {} ] ],
+     crashed |-> {}]
+
+IsCrashed(link, process) ==
+    process \in link.crashed
+
+CanCrash(link) ==
+    Cardinality(link.crashed) < MaxCrashes
+
+Crash(link, process) ==
+    [link EXCEPT !.crashed = link.crashed \union {process}]
 
 HasMessage(link, sender, receiver) ==
-    link[sender][receiver] /= {}
+    /\ ~IsCrashed(link, receiver)
+    /\ link.links[sender][receiver] /= {}
 
-Messages(link, sender, receiver) == 
-    { UnwrapMessage(m) : m \in link[sender][receiver] }
+Messages(link, sender, receiver) ==
+    IF IsCrashed(link, receiver) THEN {}
+    ELSE { UnwrapMessage(m) : m \in link.links[sender][receiver] }
 
 Send(link, sender, receiver, msg) ==
-    DuplicableSend(link, sender, receiver, msg)
+    [link EXCEPT !.links[sender][receiver] = AppendMessage(@, msg)]
 
-Receive(link, sender, receiver, msg) == 
-    LET wrapped == CHOOSE m \in link[sender][receiver] : UnwrapMessage(m) = msg
-    IN [link EXCEPT ![sender][receiver] = link[sender][receiver] \ {wrapped}]
+Receive(link, sender, receiver, msg) ==
+    LET wrapped == CHOOSE m \in link.links[sender][receiver] : UnwrapMessage(m) = msg
+    IN [link EXCEPT !.links[sender][receiver] = link.links[sender][receiver] \ {wrapped}]
 
 =============================================================================

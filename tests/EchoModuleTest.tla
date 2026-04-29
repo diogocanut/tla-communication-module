@@ -1,7 +1,7 @@
 ---------------------------- MODULE EchoModuleTest ----------------------------
 EXTENDS Integers, Sequences, TLC
 
-INSTANCE PerfectLink
+INSTANCE PerfectLink WITH MaxCrashes <- 0
 
 VARIABLES link, toSend, sentA, receivedA,
           lastSentA, lastRecvA, lastRecvB,
