@@ -37,10 +37,12 @@ Messages(link, sender, receiver) ==
     IF IsCrashed(link, receiver) THEN {}
     ELSE link.links[sender][receiver]
 
-\* Non-deterministic send: returns SET of possible next states (can deliver or drop)
+\* Non-deterministic send: returns SET of possible next states (can deliver or drop).
+\* If either endpoint has crashed, the send is a no-op.
 Send(link, sender, receiver, msg) ==
-    {ReliableSend(link, sender, receiver, msg)} \union
-    (IF ShouldDrop(link) THEN {DropMessage(link)} ELSE {})
+    IF IsCrashed(link, sender) \/ IsCrashed(link, receiver) THEN {link}
+    ELSE {ReliableSend(link, sender, receiver, msg)} \union
+         (IF ShouldDrop(link) THEN {DropMessage(link)} ELSE {})
 
 Receive(link, sender, receiver, msg) ==
     [link EXCEPT !.links[sender][receiver] = link.links[sender][receiver] \ {msg}]

@@ -17,7 +17,8 @@ Crash(link, process) ==
     [link EXCEPT !.crashed = link.crashed \union {process}]
 
 Send(link, sender, receiver, msg) ==
-    [link EXCEPT !.links[sender][receiver] = Append(@, msg)]
+    IF IsCrashed(link, sender) \/ IsCrashed(link, receiver) THEN link
+    ELSE [link EXCEPT !.links[sender][receiver] = Append(@, msg)]
 
 HasMessage(link, sender, receiver) ==
     /\ ~IsCrashed(link, receiver)

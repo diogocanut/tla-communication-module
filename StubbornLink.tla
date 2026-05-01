@@ -32,7 +32,8 @@ Messages(link, sender, receiver) ==
     ELSE { UnwrapMessage(m) : m \in link.links[sender][receiver] }
 
 Send(link, sender, receiver, msg) ==
-    [link EXCEPT !.links[sender][receiver] = AppendMessage(@, msg)]
+    IF IsCrashed(link, sender) \/ IsCrashed(link, receiver) THEN link
+    ELSE [link EXCEPT !.links[sender][receiver] = AppendMessage(@, msg)]
 
 Receive(link, sender, receiver, msg) ==
     LET wrapped == CHOOSE m \in link.links[sender][receiver] : UnwrapMessage(m) = msg

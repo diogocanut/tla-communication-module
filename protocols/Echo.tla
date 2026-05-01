@@ -1,4 +1,4 @@
----------------------------- MODULE EchoModuleTest ----------------------------
+---------------------------- MODULE Echo ----------------------------
 EXTENDS Integers, Sequences, TLC
 
 INSTANCE PerfectLink WITH MaxCrashes <- 0
