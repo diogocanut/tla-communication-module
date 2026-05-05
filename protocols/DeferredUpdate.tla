@@ -1,7 +1,7 @@
 ----------------------------- MODULE DeferredUpdate -----------------------------
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
-PLF == INSTANCE PerfectLinkFIFO
+PLF == INSTANCE PerfectLinkFIFO WITH MaxCrashes <- 0
 ABC == INSTANCE AtomicBroadcast WITH MaxCrashes <- 0
 
 CONSTANTS
@@ -171,7 +171,7 @@ TransactionOutcome(t) ==
       /\ UNCHANGED <<db, c2s, abcastQueue, writeSet, readSet, pc, operations, pendingRead, sent, received, decided, decidedOrder>>
 
 ServerRespondRead(s) ==
-  \E t \in DOMAIN c2s :
+  \E t \in Transactions :
     /\ PLF!HasMessage(c2s, t, s)
     /\ \E msg \in PLF!Messages(c2s, t, s):
       /\ c2s' = PLF!Receive(c2s, t, s)

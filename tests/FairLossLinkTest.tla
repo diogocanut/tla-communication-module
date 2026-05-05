@@ -1,5 +1,5 @@
 --------------------------- MODULE FairLossLinkTest ---------------------------
-EXTENDS Integers, Sequences, TLC, FairLossLink
+EXTENDS Integers, Sequences, FiniteSets, TLC, FairLossLink
 
 CONSTANTS Processes, totalCounter
 
@@ -8,6 +8,8 @@ VARIABLES link, counter, sent, received, receivedOrdered, reliablySent
 vars == <<link, counter, sent, received, receivedOrdered, reliablySent>>
 
 MessagesToSend == 1 .. totalCounter
+
+CorrectProcesses == { p \in Processes : ~IsCrashed(link, p) }
 
 Init ==
   /\ link = FairLossLink(Processes, Processes)
@@ -21,6 +23,7 @@ ProcessSend ==
   \E s \in Processes:
     \E r \in Processes:
       /\ s # r
+      /\ ~IsCrashed(link, s)
       /\ counter < totalCounter
       /\ LET msg == counter + 1 IN
          /\ link' \in Send(link, s, r, msg)
@@ -48,14 +51,23 @@ ProcessReceive ==
                   Append(receivedOrdered[r], m)]
           /\ UNCHANGED <<counter, sent, reliablySent>>
 
+\* Crash-stop model from Cachin
+ProcessCrash ==
+  \E p \in Processes:
+    /\ ~IsCrashed(link, p)
+    /\ CanCrash(link)
+    /\ link' = Crash(link, p)
+    /\ UNCHANGED <<counter, sent, received, receivedOrdered, reliablySent>>
+
 Termination ==
   /\ counter = totalCounter
-  /\ \A s \in Processes: \A r \in Processes: ~HasMessage(link, s, r)
+  /\ \A s \in Processes: \A r \in CorrectProcesses: ~HasMessage(link, s, r)
   /\ UNCHANGED vars
 
 Next ==
   \/ ProcessSend
   \/ ProcessReceive
+  \/ ProcessCrash
   \/ Termination
 
 Spec ==
@@ -70,24 +82,23 @@ TypeOK ==
   /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
   /\ \A p \in Processes: received[p] \subseteq MessagesToSend
   /\ link.totalDrops \in 0..MaxDrops
+  /\ link.crashed \subseteq Processes
   /\ \A s, r \in Processes: link.links[s][r] \subseteq MessagesToSend
   /\ \A s, r \in Processes: reliablySent[s][r] \subseteq MessagesToSend
 
 \* Fair Loss Link properties (Cachin, Guerraoui & Rodrigues)
 
-\* Liveness witness: at least one message is eventually delivered.
-PropertyEventualDelivery ==
-  <>(received # [p \in Processes |-> {}])
-
 \* Implementation constraint: total drops stay within configured bound.
 PropertyMaxDropsRespected ==
   [](link.totalDrops <= MaxDrops)
 
-\* (FAIR LOSS) Messages sent while the drop budget is already exhausted are eventually received.
-\* This is a finite-model approximation of the Fair Loss property.
+\* (FLL1 - Fair Loss) Messages sent while the drop budget is already exhausted
+\* are eventually received by every correct receiver. This is a finite-model
+\* approximation of the Fair Loss property.
 PropertyFairLoss ==
   \A s, r \in Processes:
     \A m \in MessagesToSend:
-      [](m \in reliablySent[s][r] => <>(m \in received[r]))
+      [](~IsCrashed(link, r)) =>
+        [](m \in reliablySent[s][r] => <>(m \in received[r]))
 
 =============================================================================

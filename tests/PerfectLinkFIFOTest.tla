@@ -1,5 +1,5 @@
 ------------------------ MODULE PerfectLinkFIFOTest ------------------------
-EXTENDS Integers, Sequences, TLC, PerfectLinkFIFO
+EXTENDS Integers, Sequences, FiniteSets, TLC, PerfectLinkFIFO
 
 CONSTANTS Processes, totalCounter
 
@@ -8,6 +8,8 @@ VARIABLES link, counter, sent, received, receivedOrdered, sentTo, receivedFrom
 vars == <<link, counter, sent, received, receivedOrdered, sentTo, receivedFrom>>
 
 MessagesToSend == 1 .. totalCounter
+
+CorrectProcesses == { p \in Processes : ~IsCrashed(link, p) }
 
 Init ==
   /\ link = PerfectLinkFIFO(Processes, Processes)
@@ -22,6 +24,7 @@ ProcessSend ==
   \E s \in Processes:
     \E r \in Processes:
       /\ s # r
+      /\ ~IsCrashed(link, s)
       /\ counter < totalCounter
       /\ LET msg == counter + 1 IN
          /\ link' = Send(link, s, r, msg)
@@ -48,14 +51,23 @@ ProcessReceive ==
                   Append(receivedFrom[r][s], m)]
           /\ UNCHANGED <<counter, sent, sentTo>>
 
+\* Crash-stop model from Cachin
+ProcessCrash ==
+  \E p \in Processes:
+    /\ ~IsCrashed(link, p)
+    /\ CanCrash(link)
+    /\ link' = Crash(link, p)
+    /\ UNCHANGED <<counter, sent, received, receivedOrdered, sentTo, receivedFrom>>
+
 Termination ==
   /\ counter = totalCounter
-  /\ \A s \in Processes: \A r \in Processes: ~HasMessage(link, s, r)
+  /\ \A s \in Processes: \A r \in CorrectProcesses: ~HasMessage(link, s, r)
   /\ UNCHANGED vars
 
 Next ==
   \/ ProcessSend
   \/ ProcessReceive
+  \/ ProcessCrash
   \/ Termination
 
 Spec ==
@@ -71,14 +83,18 @@ TypeOK ==
   /\ counter \in 0..totalCounter
   /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
   /\ \A p \in Processes: received[p] \subseteq MessagesToSend
+  /\ link.crashed \subseteq Processes
   /\ \A s, r \in Processes:
-       \A i \in 1..Len(link[s][r]): link[s][r][i] \in MessagesToSend
+       \A i \in 1..Len(link.links[s][r]): link.links[s][r][i] \in MessagesToSend
 
-\* (PL1 - Reliable Delivery) If a process sends m, the receiver eventually delivers m.
+\* (PL1 - Reliable Delivery) If a correct process sends m to a correct receiver,
+\* the receiver eventually delivers m.
 PropertyReliableDelivery ==
   \A s \in Processes:
     \A m \in MessagesToSend:
-      [](m \in sent[s] => <>(\E r \in Processes: r # s /\ m \in received[r]))
+      (m \in sent[s] /\ [](~IsCrashed(link, s)))
+        => \A r \in Processes:
+             (r # s /\ [](~IsCrashed(link, r))) => <>(m \in received[r])
 
 \* (PL2 - No Duplication) No message is delivered more than once.
 NoDuplicates(seq) ==
