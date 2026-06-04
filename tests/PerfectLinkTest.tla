@@ -1,5 +1,5 @@
 --------------------------- MODULE PerfectLinkTest ---------------------------
-EXTENDS Integers, Sequences, TLC, PerfectLink
+EXTENDS Integers, Sequences, FiniteSets, TLC, PerfectLink
 
 CONSTANTS Processes, totalCounter
 
@@ -8,6 +8,8 @@ VARIABLES link, counter, sent, received, receivedOrdered
 vars == <<link, counter, sent, received, receivedOrdered>>
 
 MessagesToSend == 1 .. totalCounter
+
+CorrectProcesses == { p \in Processes : ~IsCrashed(link, p) }
 
 Init ==
   /\ link = PerfectLink(Processes, Processes)
@@ -20,6 +22,7 @@ ProcessSend ==
   \E s \in Processes:
     \E r \in Processes:
       /\ s # r
+      /\ ~IsCrashed(link, s)
       /\ counter < totalCounter
       /\ LET msg == counter + 1 IN
          /\ link' = Send(link, s, r, msg)
@@ -42,14 +45,23 @@ ProcessReceive ==
                   Append(receivedOrdered[r], m)]
           /\ UNCHANGED <<counter, sent>>
 
+\* Crash-stop model from Cachin
+ProcessCrash ==
+  \E p \in Processes:
+    /\ ~IsCrashed(link, p)
+    /\ CanCrash(link)
+    /\ link' = Crash(link, p)
+    /\ UNCHANGED <<counter, sent, received, receivedOrdered>>
+
 Termination ==
   /\ counter = totalCounter
-  /\ \A s \in Processes: \A r \in Processes: ~HasMessage(link, s, r)
+  /\ \A s \in Processes: \A r \in CorrectProcesses: ~HasMessage(link, s, r)
   /\ UNCHANGED vars
 
 Next ==
   \/ ProcessSend
   \/ ProcessReceive
+  \/ ProcessCrash
   \/ Termination
 
 Spec ==
@@ -65,13 +77,17 @@ TypeOK ==
   /\ counter \in 0..totalCounter
   /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
   /\ \A p \in Processes: received[p] \subseteq MessagesToSend
-  /\ \A s, r \in Processes: link[s][r] \subseteq MessagesToSend
+  /\ link.crashed \subseteq Processes
+  /\ \A s, r \in Processes: link.links[s][r] \subseteq MessagesToSend
 
-\* (PL1 - Reliable Delivery) If a correct process sends m, every other process eventually delivers m.
+\* (PL1 - Reliable Delivery) If a correct process sends m to a correct receiver,
+\* the receiver eventually delivers m.
 PropertyReliableDelivery ==
   \A s \in Processes:
     \A m \in MessagesToSend:
-      [](m \in sent[s] => <>(\E r \in Processes: r # s /\ m \in received[r]))
+      (m \in sent[s] /\ [](~IsCrashed(link, s)))
+        => \A r \in Processes:
+             (r # s /\ [](~IsCrashed(link, r))) => <>(m \in received[r])
 
 \* (PL2 - No Duplication) No message is delivered more than once.
 NoDuplicates(seq) ==
