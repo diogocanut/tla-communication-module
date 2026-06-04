@@ -28,7 +28,7 @@ protocols/          case studies built on top of the core modules
 
 ## Point-to-point modules
 
-| Module | Loss | Duplication | Reordering | Notes |
+| Module | Loss | Duplication | Reordering | Guarantees |
 |---|---|---|---|---|
 | `FairLossLink` | yes (bounded by `MaxDrops`) | no | yes | Models a fair-loss channel where messages may be dropped non-deterministically. Useful for studying retransmission protocols. |
 | `StubbornLink` | no | yes (bounded by `MaxCopies`) | yes | Models stubborn delivery: each send produces multiple copies, capturing the effect of repeated retransmissions over a fair-loss link. |
@@ -37,11 +37,11 @@ protocols/          case studies built on top of the core modules
 
 ## Broadcast modules
 
-| Module | Guarantee |
-|---|---|
-| `BestEffortBroadcast` | Delivery to a non-deterministic subset of correct processes. Captures the behavior of unreliable broadcast where a faulty sender may reach only some recipients. |
-| `ReliableBroadcast` | If a correct process delivers a message, every correct process eventually delivers it (uniform agreement on delivery). |
-| `AtomicBroadcast` | Reliable delivery plus a total order: every correct process delivers the same sequence of messages. Implemented with per-process FIFO queues. |
+| Module | Loss | Duplication | Reordering | Guarantees |
+|---|---|---|---|---|
+| `BestEffortBroadcast` | yes (non-deterministic subset of correct processes) | no | yes | Captures unreliable broadcast where a faulty sender may reach only some recipients. No agreement across processes. |
+| `ReliableBroadcast` | no | no | yes | If any correct process delivers a message, every correct process eventually delivers it (uniform agreement on delivery). |
+| `AtomicBroadcast` | no | no | no | Reliable delivery plus a total order: every correct process delivers the same sequence of messages. Implemented with per-process FIFO queues. |
 
 ## Tests
 
