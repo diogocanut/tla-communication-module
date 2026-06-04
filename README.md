@@ -1,49 +1,60 @@
 # TLA+ Communication Module
 
-A reusable and modular TLA+ library for modeling communication primitives over point-to-point and broadcast abstractions. It enables designers to formally describe and verify solutions by providing these primitives as building blocks for communication subsystems. The library includes fault injection for analyzing system behavior under unreliable conditions, such as message loss, duplication, and out-of-order delivery.
+A reusable and modular TLA+ library for modeling communication primitives over point-to-point and broadcast abstractions. It enables designers to formally describe and verify distributed protocols by composing these primitives as building blocks. Each module exposes a small, uniform API (`Send`/`Broadcast`, `Receive`/`Deliver`, `HasMessage`, `Messages`) together with a crash-stop failure model, allowing protocols to be specified once and verified against communication channels with different reliability guarantees.
 
-## Project Structure
+## Reliability hierarchy
+
+The library follows the abstractions and terminology of Cachin, Guerraoui, and Rodrigues (*Introduction to Reliable and Secure Distributed Programming*). Point-to-point links are organized in a hierarchy of increasing reliability, and broadcast primitives are built on top of them:
 
 ```
-/                   ← core library modules (FairLossLink, StubbornLink, PerfectLink, etc.)
-tests/              ← test specs and TLC configs for each module
-protocols/          ← case studies built on top of the core modules
+PerfectLinkFIFO      AtomicBroadcast
+     |                    |
+ PerfectLink         ReliableBroadcast
+     |                    |
+ StubbornLink        BestEffortBroadcast
+     |
+ FairLossLink
 ```
 
-## Running
+Weaker modules expose failures explicitly (message loss, duplication, reordering), while stronger ones eliminate them. Every module models process crashes through a shared crash-stop interface (`IsCrashed`, `CanCrash`, `Crash`), bounded by a `MaxCrashes` constant.
 
-### VS Code
+## Project structure
 
-1. Install the [TLA+ extension](https://marketplace.visualstudio.com/items?itemName=tlaplus.vscode-ide) (`tlaplus.vscode-ide`).
-2. Add a `.vscode/settings.json` file at the project root with the following content:
-
-```json
-{
-  "tlaplus.moduleSearchPaths": [
-    "/absolute/path/to/this/project"
-  ]
-}
+```
+/                   core library modules
+tests/              test specs and TLC configurations for each module
+protocols/          case studies built on top of the core modules
 ```
 
-Replace `/absolute/path/to/this/project` with the actual absolute path where you cloned the repository.
+## Point-to-point modules
 
-3. Open any spec under `tests/` or `protocols/` and run **TLA+: Check model** (Command Palette).
+| Module | Loss | Duplication | Reordering | Notes |
+|---|---|---|---|---|
+| `FairLossLink` | yes (bounded by `MaxDrops`) | no | yes | Models a fair-loss channel where messages may be dropped non-deterministically. Useful for studying retransmission protocols. |
+| `StubbornLink` | no | yes (bounded by `MaxCopies`) | yes | Models stubborn delivery: each send produces multiple copies, capturing the effect of repeated retransmissions over a fair-loss link. |
+| `PerfectLink` | no | no | yes | Reliable delivery with no duplication, but messages may be delivered in any order. |
+| `PerfectLinkFIFO` | no | no | no | Reliable, exactly-once, order-preserving delivery between each sender/receiver pair. |
 
-### Command Line
+## Broadcast modules
 
-Requires a `tla2tools.jar`. You can download it from the [TLA+ releases page](https://github.com/tlaplus/tlaplus/releases) or use the one bundled with the VS Code extension.
+| Module | Guarantee |
+|---|---|
+| `BestEffortBroadcast` | Delivery to a non-deterministic subset of correct processes. Captures the behavior of unreliable broadcast where a faulty sender may reach only some recipients. |
+| `ReliableBroadcast` | If a correct process delivers a message, every correct process eventually delivers it (uniform agreement on delivery). |
+| `AtomicBroadcast` | Reliable delivery plus a total order: every correct process delivers the same sequence of messages. Implemented with per-process FIFO queues. |
 
-Run from the repository root so relative paths to `tests/` and `protocols/` work as shown.
+## Tests
 
-```bash
-java -DTLA-Library=/path/to/project \
-  -cp /path/to/tla2tools.jar \
-  tlc2.TLC \
-  -config tests/StubbornLinkTest.cfg \
-  tests/StubbornLinkTest.tla
-```
+The `tests/` directory contains one TLA+ specification and one `.cfg` per module, suitable for TLC model checking. Each test instantiates the corresponding module with small constants and checks invariants and temporal properties such as no-creation, no-duplication, validity, agreement, and (for `AtomicBroadcast`) total order. The composition test `StubbornDeliveryOverFairLossTest` verifies that a stubborn link built on top of a fair-loss link satisfies the expected stubborn delivery property.
 
-- Replace `/path/to/project` with the root directory of this repository.
-- Replace `/path/to/tla2tools.jar` with the path to your `tla2tools.jar`.
-- The `TLA-Library` JVM property tells SANY/TLC where to look for modules outside the spec's own directory.
-- Substitute `StubbornLinkTest` with any other test or protocol spec as needed (and update the `-config` path accordingly).
+## Case studies
+
+The `protocols/` directory contains protocol specifications written against the library:
+
+- `protocols/echo/` contains the Echo protocol verified over three different links (`EchoPerfect`, `EchoStubborn`, `EchoFairLoss`), illustrating how the same protocol behaves under different reliability assumptions.
+- `protocols/DeferredUpdate.tla` specifies the Deferred Update Replication (DUR) protocol, combining `PerfectLinkFIFO` for client-server communication with `AtomicBroadcast` for replica coordination.
+
+## Publications
+
+- *WTF 2025*: point-to-point primitives and the Echo protocol case study.
+- *LADC 2025*: broadcast primitives and verification of the Deferred Update Replication protocol.
