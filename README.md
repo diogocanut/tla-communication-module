@@ -4,7 +4,7 @@ A reusable and modular TLA+ library for modeling communication primitives over p
 
 ## Reliability hierarchy
 
-The library follows the abstractions and terminology of Cachin, Guerraoui, and Rodrigues (*Introduction to Reliable and Secure Distributed Programming*). Point-to-point links are organized in a hierarchy of increasing reliability, and broadcast primitives are built on top of them:
+The library follows the abstractions and terminology of Cachin, Guerraoui, and Rodrigues (*Introduction to Reliable and Secure Distributed Programming*). Point-to-point links and broadcast channels are each organized as an independent hierarchy of increasing reliability:
 
 ```
 PerfectLinkFIFO      AtomicBroadcast
@@ -16,7 +16,7 @@ PerfectLinkFIFO      AtomicBroadcast
  FairLossLink
 ```
 
-Weaker modules expose failures explicitly (message loss, duplication, reordering), while stronger ones eliminate them. Every module models process crashes through a shared crash-stop interface (`IsCrashed`, `CanCrash`, `Crash`), bounded by a `MaxCrashes` constant.
+Within each hierarchy, weaker modules expose failures explicitly (message loss, duplication, reordering), while stronger ones eliminate them. The broadcast modules specify their guarantees directly over an abstract channel rather than implementing them on top of point-to-point links. Every module shares a crash-stop interface (`IsCrashed`, `CanCrash`, `Crash`), bounded by a `MaxCrashes` constant.
 
 ## Project structure
 
@@ -56,5 +56,5 @@ The `protocols/` directory contains protocol specifications written against the 
 
 ## Publications
 
-- *WTF 2025*: point-to-point primitives and the Echo protocol case study.
-- *LADC 2025*: broadcast primitives and verification of the Deferred Update Replication protocol.
+- Diogo Peixoto and Odorico Machado Mendizabal. *Reusable TLA+ Communication Primitives for Modeling and Verifying Distributed Systems*. In Proceedings of the 26th Workshop on Testing and Fault Tolerance (WTF), SBC, 2025, pp. 113-125. DOI: [10.5753/wtf.2025.8866](https://doi.org/10.5753/wtf.2025.8866). [[PDF]](https://sol.sbc.org.br/index.php/wtf/article/view/35652)
+- Diogo Peixoto and Odorico Mendizabal. *A Practical TLA+ Library for Designing and Verifying Distributed Systems*. In Anais do XIV Latin-American Symposium on Dependable Computing (LADC), SBC, 2025, pp. 183-200. [[PDF]](https://sol.sbc.org.br/index.php/ladc/article/view/41078)
