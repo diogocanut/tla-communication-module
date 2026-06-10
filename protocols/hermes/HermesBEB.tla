@@ -25,6 +25,7 @@ EXTENDS     Integers,
             FiniteSets
 
 CONSTANTS   H_NODES,
+            H_WRITERS,
             H_MAX_VERSION,
             H_MAX_CRASHES
 
@@ -132,6 +133,7 @@ HRead(n) ==
     /\ UNCHANGED hvars
 
 HWrite(n) ==
+    /\  n \in H_WRITERS
     /\  nodeState[n]      \in {"valid"}
     /\  nodeTS[n].version < H_MAX_VERSION \* Only to configurably terminate the model checking
     /\  h_actions_for_upd(n, nodeTS[n].version + 1, n, "write", {})
@@ -257,7 +259,18 @@ HNext == \* Hermes (read/write) protocol (Coordinator and Follower actions) + fa
             \/ HNodeFailure(n)
 
 
-H_Spec == HInit /\ [][HNext]_hvars
+\* Fairness: weak fairness on every receive / replay action so that, once
+\* such an action stays enabled, it eventually fires. No fairness on
+\* HWrite (writers choose when to write) or HNodeFailure (failures are voluntary).
+H_Fairness ==
+    /\ \A n \in H_NODES: WF_hvars(HRcvInv(n))
+    /\ \A n \in H_NODES: WF_hvars(HRcvAck(n))
+    /\ \A n \in H_NODES: WF_hvars(HSendVals(n))
+    /\ \A n \in H_NODES: WF_hvars(HRcvVal(n))
+    /\ \A n \in H_NODES: WF_hvars(HCoordWriteReplay(n))
+    /\ \A n \in H_NODES: WF_hvars(HFollowerWriteReplay(n))
+
+H_Spec == HInit /\ [][HNext]_hvars /\ H_Fairness
 
 
 -------------------------------------------------------------------------------------
@@ -281,6 +294,16 @@ HConsistent ==
                             \/ nodeState[s] /= "valid"
                             \/ nodeTS[k] = nodeTS[s]
 
-THEOREM H_Spec =>([]HTypeOK) /\ ([]HConsistent)
+\* PROPERTY (LIVENESS): every write started by a correct (non-crashing)
+\* coordinator eventually commits. Includes writes taken over by followers
+\* via write-replay after the original coordinator crashed. Cachin et al.,
+\* "Introduction to Reliable and Secure Distributed Programming",
+\* Termination pattern (Response under Globally).
+PropertyWriteTermination ==
+    \A n \in H_NODES:
+        ([](n \in aliveNodes))
+            => ((nodeState[n] \in {"write", "replay"}) ~> (nodeState[n] = "valid"))
+
+THEOREM H_Spec =>([]HTypeOK) /\ ([]HConsistent) /\ PropertyWriteTermination
 
 =============================================================================
