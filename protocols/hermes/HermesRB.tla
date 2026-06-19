@@ -292,6 +292,13 @@ HConsistent ==
                             \/ nodeState[s] /= "valid"
                             \/ nodeTS[k] = nodeTS[s]
 
+\* CRASH-STOP: the protocol-level and library-level notions of "crashed"
+\* never diverge. Together with HNext drawing the actor from aliveNodes,
+\* this is what guarantees a crashed node performs no further action.
+HCrashStop ==
+    /\ channel.crashed = (H_NODES \ aliveNodes)
+    /\ link.crashed    = (H_NODES \ aliveNodes)
+
 \* PROPERTY (LIVENESS): every write started by a correct (non-crashing)
 \* coordinator eventually commits. Includes writes taken over by followers
 \* via write-replay after the original coordinator crashed. Cachin et al.,
@@ -302,6 +309,6 @@ PropertyWriteTermination ==
         ([](n \in aliveNodes))
             => ((nodeState[n] \in {"write", "replay"}) ~> (nodeState[n] = "valid"))
 
-THEOREM H_Spec =>([]HTypeOK) /\ ([]HConsistent) /\ PropertyWriteTermination
+THEOREM H_Spec =>([]HTypeOK) /\ ([]HConsistent) /\ ([]HCrashStop) /\ PropertyWriteTermination
 
 =============================================================================
