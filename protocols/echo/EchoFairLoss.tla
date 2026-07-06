@@ -1,7 +1,12 @@
 -------------------------- MODULE EchoFairLoss --------------------------
 EXTENDS Integers, Sequences, TLC
 
-FL == INSTANCE FairLossLink WITH MaxDrops <- 0, MaxCrashes <- 0
+CS == INSTANCE CrashStop WITH MaxCrashes <- 0
+FL == INSTANCE FairLossLink WITH MaxDrops <- 0
+
+\* Failure-free scenario: the failure model is a constant value in which no
+\* process ever crashes.
+fm == CS!CrashStop
 
 Processes == {"A", "B"}
 MessagesToSend == {1, 2, 3, 4, 5, -1}
@@ -27,7 +32,7 @@ SendA ==
   /\ ~aWaiting
   /\ toSend /= <<>>
   /\ messageToSend' = Head(toSend)
-  /\ \E newLink \in FL!Send(link, "A", "B", messageToSend'):
+  /\ \E newLink \in FL!Send(link, fm, "A", "B", messageToSend'):
        link' = newLink
   /\ sentMessagesA' = sentMessagesA \cup {messageToSend'}
   /\ toSend' = Tail(toSend)
@@ -36,25 +41,25 @@ SendA ==
 
 ReceiveA ==
   /\ aWaiting
-  /\ FL!HasMessage(link, "B", "A")
-  /\ \E m \in FL!Messages(link, "B", "A"):
-       /\ link' = FL!Receive(link, "B", "A", m)
+  /\ FL!HasMessage(link, fm, "B", "A")
+  /\ \E m \in FL!Messages(link, fm, "B", "A"):
+       /\ link' = FL!Receive(link, fm, "B", "A", m)
        /\ receivedMessageA' = m
   /\ aWaiting' = FALSE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB, bPending>>
 
 ReceiveB ==
   /\ ~bPending
-  /\ FL!HasMessage(link, "A", "B")
-  /\ \E m \in FL!Messages(link, "A", "B"):
-       /\ link' = FL!Receive(link, "A", "B", m)
+  /\ FL!HasMessage(link, fm, "A", "B")
+  /\ \E m \in FL!Messages(link, fm, "A", "B"):
+       /\ link' = FL!Receive(link, fm, "A", "B", m)
        /\ receivedMessageB' = m
   /\ bPending' = TRUE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, aWaiting>>
 
 EchoB ==
   /\ bPending
-  /\ \E newLink \in FL!Send(link, "B", "A", receivedMessageB):
+  /\ \E newLink \in FL!Send(link, fm, "B", "A", receivedMessageB):
        link' = newLink
   /\ bPending' = FALSE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, receivedMessageB, aWaiting>>

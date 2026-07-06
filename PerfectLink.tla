@@ -1,36 +1,27 @@
 ---------------------------- MODULE PerfectLink  ----------------------------
 EXTENDS Integers, Sequences, FiniteSets
 
-CONSTANT MaxCrashes
+LOCAL IsCrashed(fm, process) == process \in fm.crashed
 
 LOCAL AppendMessage(set, msg) == set \cup {msg}
 
 PerfectLink(senders, receivers) ==
-    [links |-> [ s \in senders |-> [ r \in receivers |-> {} ] ],
-     crashed |-> {}]
+    [links |-> [ s \in senders |-> [ r \in receivers |-> {} ] ]]
 
-IsCrashed(link, process) ==
-    process \in link.crashed
-
-CanCrash(link) ==
-    Cardinality(link.crashed) < MaxCrashes
-
-Crash(link, process) ==
-    [link EXCEPT !.crashed = link.crashed \union {process}]
-
-HasMessage(link, sender, receiver) ==
-    /\ ~IsCrashed(link, receiver)
+HasMessage(link, fm, sender, receiver) ==
+    /\ ~IsCrashed(fm, receiver)
     /\ link.links[sender][receiver] /= {}
 
-Messages(link, sender, receiver) ==
-    IF IsCrashed(link, receiver) THEN {}
+Messages(link, fm, sender, receiver) ==
+    IF IsCrashed(fm, receiver) THEN {}
     ELSE link.links[sender][receiver]
 
-Send(link, sender, receiver, msg) ==
-    IF IsCrashed(link, sender) \/ IsCrashed(link, receiver) THEN link
+Send(link, fm, sender, receiver, msg) ==
+    IF IsCrashed(fm, sender) \/ IsCrashed(fm, receiver) THEN link
     ELSE [link EXCEPT !.links[sender][receiver] = AppendMessage(@, msg)]
 
-Receive(link, sender, receiver, msg) ==
-    [link EXCEPT !.links[sender][receiver] = link.links[sender][receiver] \ {msg}]
+Receive(link, fm, sender, receiver, msg) ==
+    IF IsCrashed(fm, receiver) THEN link
+    ELSE [link EXCEPT !.links[sender][receiver] = link.links[sender][receiver] \ {msg}]
 
 =============================================================================

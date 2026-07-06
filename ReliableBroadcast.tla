@@ -1,65 +1,31 @@
 -------------------------- MODULE ReliableBroadcast --------------------------
 EXTENDS Integers, Sequences, FiniteSets
 
-CONSTANT MaxCrashes
+LOCAL IsCrashed(fm, process) == process \in fm.crashed
 
-LOCAL InitChannel(groups, processes) == 
-  [g \in groups |-> [ p \in processes |-> {} ]]
+Channel(groups, processes) ==
+  [links |-> [g \in groups |-> [ p \in processes |-> {} ]]]
 
-LOCAL AppendMessage(channel, group, receiver, msg) ==
-  channel[group][receiver] \union {msg}
+HasMessage(channel, fm, group, process) ==
+  ~IsCrashed(fm, process) /\ channel.links[group][process] /= {}
 
-LOCAL UpdateChannelLinks(channel, group, newGroupLinks) ==
-  [ g \in DOMAIN channel.links |->
-    IF g = group THEN newGroupLinks ELSE channel.links[g]
-  ]
-
-Channel(groups, processes) == 
-  [links |-> InitChannel(groups, processes), crashed |-> {}]
-
-IsCrashed(channel, process) ==
-  process \in channel.crashed
-
-CanCrash(channel) ==
-  Cardinality(channel.crashed) < MaxCrashes
-
-Crash(channel, process) ==
-  [channel EXCEPT !.crashed = channel.crashed \union {process}]
-
-HasMessage(channel, group, process) ==
-  ~IsCrashed(channel, process) /\ channel.links[group][process] /= {}
-
-Messages(channel, group, process) ==
-  IF IsCrashed(channel, process) THEN {}
+Messages(channel, fm, group, process) ==
+  IF IsCrashed(fm, process) THEN {}
   ELSE channel.links[group][process]
 
-LOCAL BroadcastToAll(channel, group, msg, receivers) ==
-  [ p \in DOMAIN channel.links[group] |->
-    IF p \in receivers THEN
-      AppendMessage(channel.links, group, p, msg)
-    ELSE
-      channel.links[group][p]
-  ]
-
-Broadcast(channel, group, sender, msg) ==
-  IF IsCrashed(channel, sender) THEN channel
+Broadcast(channel, fm, group, sender, msg) ==
+  IF IsCrashed(fm, sender) THEN channel
   ELSE
     LET aliveReceivers == { p \in DOMAIN channel.links[group] :
-                            ~IsCrashed(channel, p) }
-    IN
-    [
-      links   |-> UpdateChannelLinks(channel, group,
-                     BroadcastToAll(channel, group, msg, aliveReceivers)),
-      crashed |-> channel.crashed
-    ]
+                            ~IsCrashed(fm, p) }
+    IN [channel EXCEPT !.links[group] =
+         [ p \in DOMAIN channel.links[group] |->
+             IF p \in aliveReceivers
+             THEN channel.links[group][p] \union {msg}
+             ELSE channel.links[group][p] ]]
 
-Deliver(channel, group, process, msg) ==
-  IF IsCrashed(channel, process) THEN channel
-  ELSE
-    [
-      links   |-> [ channel.links EXCEPT
-                      ![group][process] = channel.links[group][process] \ {msg}
-                  ],
-      crashed |-> channel.crashed
-    ]
+Deliver(channel, fm, group, process, msg) ==
+  IF IsCrashed(fm, process) THEN channel
+  ELSE [channel EXCEPT !.links[group][process] = channel.links[group][process] \ {msg}]
+
 ==============================================================================

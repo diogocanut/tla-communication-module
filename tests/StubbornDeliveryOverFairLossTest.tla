@@ -1,5 +1,5 @@
 -------------------- MODULE StubbornDeliveryOverFairLossTest --------------------
-EXTENDS Integers, Sequences, TLC, FiniteSets, FairLossLink
+EXTENDS Integers, Sequences, TLC, FiniteSets, FairLossLink, CrashStop
 
 (*
   In Fair-Loss Link, we use a MaxDrops constant to bound how many times a message can be dropped.
@@ -9,16 +9,17 @@ EXTENDS Integers, Sequences, TLC, FiniteSets, FairLossLink
 
 CONSTANTS Processes, totalCounter
 
-VARIABLES link, counter, sent, received, pending
+VARIABLES link, fm, counter, sent, received, pending
 
-vars == <<link, counter, sent, received, pending>>
+vars == <<link, fm, counter, sent, received, pending>>
 
 MessagesToSend == 1 .. totalCounter
 
-CorrectProcesses == { p \in Processes : ~IsCrashed(link, p) }
+CorrectProcesses == { p \in Processes : ~IsCrashed(fm, p) }
 
 Init ==
   /\ link = FairLossLink(Processes, Processes)
+  /\ fm = CrashStop
   /\ counter = 0
   /\ sent = [s \in Processes |-> [r \in Processes |-> {}]]
   /\ received = [p \in Processes |-> {}]
@@ -28,47 +29,48 @@ ProcessSend ==
   \E s \in Processes:
     \E r \in Processes:
       /\ s # r
-      /\ ~IsCrashed(link, s)
+      /\ ~IsCrashed(fm, s)
       /\ counter < totalCounter
       /\ LET msg == counter + 1 IN
-         /\ link' \in Send(link, s, r, msg)
+         /\ link' \in Send(link, fm, s, r, msg)
          /\ counter' = counter + 1
          /\ sent' = [sent EXCEPT ![s][r] = sent[s][r] \cup {msg}]
          /\ pending' = [pending EXCEPT ![s][r] = pending[s][r] \cup {msg}]
-         /\ UNCHANGED received
+         /\ UNCHANGED <<fm, received>>
 
 ProcessRetransmit ==
   \E s \in Processes:
     \E r \in Processes:
       /\ s # r
-      /\ ~IsCrashed(link, s)
+      /\ ~IsCrashed(fm, s)
       /\ pending[s][r] /= {}
       /\ \E m \in pending[s][r]:
-         /\ link' \in Send(link, s, r, m)
-         /\ UNCHANGED <<counter, sent, received, pending>>
+         /\ link' \in Send(link, fm, s, r, m)
+         /\ UNCHANGED <<fm, counter, sent, received, pending>>
 
 ProcessReceive ==
   \E s \in Processes:
     \E r \in Processes:
       /\ s # r
-      /\ HasMessage(link, s, r)
-      /\ \E m \in Messages(link, s, r):
-         /\ link' = Receive(link, s, r, m)
+      /\ HasMessage(link, fm, s, r)
+      /\ \E m \in Messages(link, fm, s, r):
+         /\ link' = Receive(link, fm, s, r, m)
          /\ received' = [received EXCEPT ![r] = received[r] \cup {m}]
          /\ pending' = [pending EXCEPT ![s][r] = pending[s][r] \ {m}]
-         /\ UNCHANGED <<counter, sent>>
+         /\ UNCHANGED <<fm, counter, sent>>
 
-\* Crash-stop model from Cachin
+\* Crash-stop model from Cachin: the crash is recorded once, in the shared
+\* failure model; the link itself is untouched.
 ProcessCrash ==
   \E p \in Processes:
-    /\ ~IsCrashed(link, p)
-    /\ CanCrash(link)
-    /\ link' = Crash(link, p)
-    /\ UNCHANGED <<counter, sent, received, pending>>
+    /\ ~IsCrashed(fm, p)
+    /\ CanCrash(fm)
+    /\ fm' = Crash(fm, p)
+    /\ UNCHANGED <<link, counter, sent, received, pending>>
 
 Termination ==
   /\ counter = totalCounter
-  /\ \A s \in Processes: \A r \in CorrectProcesses: ~HasMessage(link, s, r)
+  /\ \A s \in Processes: \A r \in CorrectProcesses: ~HasMessage(link, fm, s, r)
   /\ \A s \in CorrectProcesses: \A r \in CorrectProcesses: pending[s][r] = {}
   /\ UNCHANGED vars
 
@@ -79,12 +81,16 @@ Next ==
   \/ ProcessCrash
   \/ Termination
 
+\* Fairness convention (paper, Properties under Crash): weak fairness on the
+\* consumer-side actions only. A receive stays enabled while a message waits
+\* (the message cannot vanish), so WF forces eventual delivery; sends and
+\* crashes are choices and get no fairness. The liveness properties are
+\* conditional on their triggers, so behaviors that never send satisfy them
+\* trivially.
 Spec ==
   Init /\ [][Next]_vars
-       /\ WF_vars(Next)
-       /\ SF_vars(ProcessSend)
-       /\ SF_vars(ProcessRetransmit)
-       /\ SF_vars(ProcessReceive)
+       /\ WF_vars(ProcessRetransmit)
+       /\ WF_vars(ProcessReceive)
 
 TypeOK ==
   /\ counter \in 0..totalCounter
@@ -92,7 +98,7 @@ TypeOK ==
   /\ \A p \in Processes: received[p] \subseteq MessagesToSend
   /\ \A s, r \in Processes: pending[s][r] \subseteq MessagesToSend
   /\ link.totalDrops \in 0..MaxDrops
-  /\ link.crashed \subseteq Processes
+  /\ fm.crashed \subseteq Processes
   /\ \A s, r \in Processes: link.links[s][r] \subseteq MessagesToSend
 
 \* (STUBBORN DELIVERY) If a correct process sends m to a correct receiver,
@@ -103,7 +109,7 @@ PropertyStubbornDelivery ==
   \A s \in Processes:
     \A r \in Processes:
       \A m \in MessagesToSend:
-        ([](~IsCrashed(link, s)) /\ [](~IsCrashed(link, r)))
+        ([](~IsCrashed(fm, s)) /\ [](~IsCrashed(fm, r)))
           => [](m \in sent[s][r] => <>(m \in received[r]))
 
 \* (NO CREATION) A process receives m only if some process previously sent m.

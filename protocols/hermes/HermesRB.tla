@@ -16,8 +16,10 @@
    - Communication primitives reworked over the TLA+ communication module
      library: INV and VAL routed through ReliableBroadcast, ACK through
      PerfectLink.
-   - Crash semantics imported from the library (RB and PerfectLink share
-     a uniform Crash / IsCrashed / CanCrash interface).
+   - Crash semantics imported from the library's CrashStop module (Cachin's
+     crash-stop process abstraction): a single failure-model value fm is
+     consulted by every operator of both channels, so there is one source
+     of truth for which nodes have crashed.
    - H_MAX_CRASHES constant added to expose the library's crash bound at
      the protocol level.
  ***************************************************************************)
@@ -29,10 +31,12 @@ CONSTANTS   H_NODES,
             H_MAX_VERSION,
             H_MAX_CRASHES
 
-RB == INSTANCE ReliableBroadcast WITH MaxCrashes <- H_MAX_CRASHES
-PL == INSTANCE PerfectLink       WITH MaxCrashes <- H_MAX_CRASHES
+CS == INSTANCE CrashStop WITH MaxCrashes <- H_MAX_CRASHES
+RB == INSTANCE ReliableBroadcast
+PL == INSTANCE PerfectLink
 
-VARIABLES   nodeTS,
+VARIABLES   fm,
+            nodeTS,
             nodeState,
             nodeRcvedAcks,
             nodeLastWriter,
@@ -43,7 +47,7 @@ VARIABLES   nodeTS,
             channel,
             link
 
-hvars == << channel, link, nodeTS, nodeState, nodeRcvedAcks, nodeLastWriter,
+hvars == << channel, link, fm, nodeTS, nodeState, nodeRcvedAcks, nodeLastWriter,
             nodeLastWriteTS, nodeWriteEpochID, aliveNodes, epochID >>
 
 InvGroup == "inv"
@@ -84,6 +88,7 @@ isAlive(n) == n \in aliveNodes
 HInit ==
     /\  channel          = RB!Channel({InvGroup, ValGroup}, H_NODES)
     /\  link             = PL!PerfectLink(H_NODES, H_NODES)
+    /\  fm               = CS!CrashStop
     /\  epochID          = 0
     /\  aliveNodes       = H_NODES
     /\  nodeWriteEpochID = [n \in H_NODES |-> 0]
@@ -112,12 +117,12 @@ h_send_inv(n, newVersion, newTieBreaker) ==
               sender     |-> n,
               version    |-> newVersion,
               tieBreaker |-> newTieBreaker]
-    IN  channel' = RB!Broadcast(channel, InvGroup, n, m)
+    IN  channel' = RB!Broadcast(channel, fm, InvGroup, n, m)
 
 h_actions_for_upd(n, newVersion, newTieBreaker, newState, newAcks) ==
     /\  h_upd_state(n, newVersion, newTieBreaker, newState, newAcks)
     /\  h_send_inv(n, newVersion, newTieBreaker)
-    /\  UNCHANGED <<link, aliveNodes, epochID>>
+    /\  UNCHANGED <<link, fm, aliveNodes, epochID>>
 
 
 h_actions_for_upd_replay(n, acks) ==
@@ -146,8 +151,8 @@ HCoordWriteReplay(n) ==
 
 HRcvAck(n) ==
     \E node \in H_NODES :
-        /\ PL!HasMessage(link, node, n)
-        /\ \E m \in PL!Messages(link, node, n) :
+        /\ PL!HasMessage(link, fm, node, n)
+        /\ \E m \in PL!Messages(link, fm, node, n) :
             /\ m.type    = "ACK"
             /\ m.epochID = epochID
             /\ m.sender /= n
@@ -156,9 +161,9 @@ HRcvAck(n) ==
                        nodeLastWriteTS[n].version,
                        nodeLastWriteTS[n].tieBreaker)
             /\ nodeState[n] \in {"write", "invalid_write", "replay"}
-            /\ link'       = PL!Receive(link, node, n, m)
+            /\ link'       = PL!Receive(link, fm, node, n, m)
             /\ nodeRcvedAcks' = [nodeRcvedAcks EXCEPT ![n] = @ \union {m.sender}]
-            /\ UNCHANGED <<channel,
+            /\ UNCHANGED <<channel, fm,
                            nodeTS, nodeState, nodeLastWriter, nodeLastWriteTS,
                            nodeWriteEpochID, aliveNodes, epochID>>
 
@@ -170,8 +175,8 @@ HSendVals(n) ==
     /\ LET m == [type       |-> "VAL",
                  version    |-> nodeTS[n].version,
                  tieBreaker |-> nodeTS[n].tieBreaker]
-       IN  channel' = RB!Broadcast(channel, ValGroup, n, m)
-    /\ UNCHANGED <<link, nodeTS, nodeLastWriter, nodeLastWriteTS,
+       IN  channel' = RB!Broadcast(channel, fm, ValGroup, n, m)
+    /\ UNCHANGED <<link, fm, nodeTS, nodeLastWriter, nodeLastWriteTS,
                    aliveNodes, nodeRcvedAcks, epochID, nodeWriteEpochID>>
 
 HCoordinatorActions(n) ==
@@ -185,13 +190,13 @@ HCoordinatorActions(n) ==
 \* Follower
 
 HRcvInv(n) ==  \* Process a received invalidation
-    /\ RB!HasMessage(channel, InvGroup, n)
-    /\ \E m \in RB!Messages(channel, InvGroup, n) :
+    /\ RB!HasMessage(channel, fm, InvGroup, n)
+    /\ \E m \in RB!Messages(channel, fm, InvGroup, n) :
         /\ m.type     = "INV"
         /\ m.epochID  = epochID
         /\ m.sender  /= n
-        /\ channel' = RB!Deliver(channel, InvGroup, n, m)
-        /\ link'    = PL!Send(link, n, m.sender,
+        /\ channel' = RB!Deliver(channel, fm, InvGroup, n, m)
+        /\ link'    = PL!Send(link, fm, n, m.sender,
                                 [type       |-> "ACK",
                                  sender     |-> n,
                                  epochID    |-> epochID,
@@ -207,18 +212,18 @@ HRcvInv(n) ==  \* Process a received invalidation
                      ELSE nodeState' = [nodeState EXCEPT ![n] = "invalid_write"]
            ELSE
                   UNCHANGED <<nodeState, nodeTS, nodeLastWriter, nodeWriteEpochID>>
-        /\ UNCHANGED <<nodeLastWriteTS, aliveNodes, nodeRcvedAcks, epochID, nodeWriteEpochID>>
+        /\ UNCHANGED <<fm, nodeLastWriteTS, aliveNodes, nodeRcvedAcks, epochID, nodeWriteEpochID>>
 
 HRcvVal(n) ==
-    /\ RB!HasMessage(channel, ValGroup, n)
-    /\ \E m \in RB!Messages(channel, ValGroup, n) :
+    /\ RB!HasMessage(channel, fm, ValGroup, n)
+    /\ \E m \in RB!Messages(channel, fm, ValGroup, n) :
         /\ m.type = "VAL"
         /\ nodeState[n] /= "valid"
         /\ equalTS(m.version, m.tieBreaker,
                    nodeTS[n].version, nodeTS[n].tieBreaker)
-        /\ channel' = RB!Deliver(channel, ValGroup, n, m)
+        /\ channel' = RB!Deliver(channel, fm, ValGroup, n, m)
         /\ nodeState' = [nodeState EXCEPT ![n] = "valid"]
-        /\ UNCHANGED <<link, nodeTS, nodeLastWriter, nodeLastWriteTS,
+        /\ UNCHANGED <<link, fm, nodeTS, nodeLastWriter, nodeLastWriteTS,
                        nodeRcvedAcks, nodeWriteEpochID, aliveNodes, epochID>>
 
 HFollowerWriteReplay(n) ==
@@ -233,19 +238,17 @@ HFollowerActions(n) ==
     \/ HRcvVal(n)
 
 -------------------------------------------------------------------------------------
-\* Node failure: mark crashed on the broadcast channel and the ack link,
-\* and bump epoch.
+\* Node failure: record the crash once, in the shared failure model, and
+\* bump the epoch. Both channels consult fm, so neither is touched here.
 
 HNodeFailure(n) ==
     /\ Cardinality(aliveNodes) > 2
-    /\ RB!CanCrash(channel)
-    /\ PL!CanCrash(link)
+    /\ CS!CanCrash(fm)
     /\ nodeRcvedAcks' = [k \in H_NODES |-> {}]
     /\ aliveNodes'    = aliveNodes \ {n}
     /\ epochID'       = epochID + 1
-    /\ channel'       = RB!Crash(channel, n)
-    /\ link'          = PL!Crash(link, n)
-    /\ UNCHANGED <<nodeState, nodeTS, nodeLastWriter,
+    /\ fm'            = CS!Crash(fm, n)
+    /\ UNCHANGED <<channel, link, nodeState, nodeTS, nodeLastWriter,
                    nodeLastWriteTS, nodeWriteEpochID>>
 
 -------------------------------------------------------------------------------------
@@ -282,6 +285,7 @@ HTypeOK ==  \* The type correctness invariant
     /\  nodeState       \in [H_NODES -> {"valid", "invalid", "invalid_write",
                                          "write", "replay"}]
     /\  aliveNodes      \subseteq H_NODES
+    /\  fm.crashed      \subseteq H_NODES
     /\  epochID         \in 0..(Cardinality(H_NODES) - 1)
     /\  nodeWriteEpochID \in [H_NODES -> 0..(Cardinality(H_NODES) - 1)]
 
@@ -292,12 +296,13 @@ HConsistent ==
                             \/ nodeState[s] /= "valid"
                             \/ nodeTS[k] = nodeTS[s]
 
-\* CRASH-STOP: the protocol-level and library-level notions of "crashed"
-\* never diverge. Together with HNext drawing the actor from aliveNodes,
-\* this is what guarantees a crashed node performs no further action.
+\* CRASH-STOP: the protocol-level membership view (aliveNodes) and the
+\* library's failure model never diverge. Together with HNext drawing the
+\* actor from aliveNodes, this is what guarantees a crashed node performs
+\* no further action. Because the failure model is a single shared value,
+\* both channels see exactly this set of crashes.
 HCrashStop ==
-    /\ channel.crashed = (H_NODES \ aliveNodes)
-    /\ link.crashed    = (H_NODES \ aliveNodes)
+    fm.crashed = (H_NODES \ aliveNodes)
 
 \* PROPERTY (LIVENESS): every write started by a correct (non-crashing)
 \* coordinator eventually commits. Includes writes taken over by followers

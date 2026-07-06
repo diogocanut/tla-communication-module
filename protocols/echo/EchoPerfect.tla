@@ -1,7 +1,12 @@
 -------------------------- MODULE EchoPerfect --------------------------
 EXTENDS Integers, Sequences, TLC
 
-PL == INSTANCE PerfectLinkFIFO WITH MaxCrashes <- 0
+CS == INSTANCE CrashStop WITH MaxCrashes <- 0
+PL == INSTANCE PerfectLinkFIFO
+
+\* Failure-free scenario: the failure model is a constant value in which no
+\* process ever crashes.
+fm == CS!CrashStop
 
 Processes == {"A", "B"}
 MessagesToSend == {1, 2, 3, 4, 5, -1}
@@ -27,7 +32,7 @@ SendA ==
   /\ ~aWaiting
   /\ toSend /= <<>>
   /\ messageToSend' = Head(toSend)
-  /\ link' = PL!Send(link, "A", "B", messageToSend')
+  /\ link' = PL!Send(link, fm, "A", "B", messageToSend')
   /\ sentMessagesA' = sentMessagesA \cup {messageToSend'}
   /\ toSend' = Tail(toSend)
   /\ aWaiting' = TRUE
@@ -35,25 +40,25 @@ SendA ==
 
 ReceiveA ==
   /\ aWaiting
-  /\ PL!HasMessage(link, "B", "A")
-  /\ \E m \in PL!Messages(link, "B", "A"):
-       /\ link' = PL!Receive(link, "B", "A")
+  /\ PL!HasMessage(link, fm, "B", "A")
+  /\ \E m \in PL!Messages(link, fm, "B", "A"):
+       /\ link' = PL!Receive(link, fm, "B", "A")
        /\ receivedMessageA' = m
   /\ aWaiting' = FALSE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB, bPending>>
 
 ReceiveB ==
   /\ ~bPending
-  /\ PL!HasMessage(link, "A", "B")
-  /\ \E m \in PL!Messages(link, "A", "B"):
-       /\ link' = PL!Receive(link, "A", "B")
+  /\ PL!HasMessage(link, fm, "A", "B")
+  /\ \E m \in PL!Messages(link, fm, "A", "B"):
+       /\ link' = PL!Receive(link, fm, "A", "B")
        /\ receivedMessageB' = m
   /\ bPending' = TRUE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, aWaiting>>
 
 EchoB ==
   /\ bPending
-  /\ link' = PL!Send(link, "B", "A", receivedMessageB)
+  /\ link' = PL!Send(link, fm, "B", "A", receivedMessageB)
   /\ bPending' = FALSE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, receivedMessageB, aWaiting>>
 

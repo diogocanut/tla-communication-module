@@ -3,63 +3,51 @@ EXTENDS Integers, FiniteSets, Sequences
 
 CONSTANT MaxCrashes
 
-LOCAL InitChannel(groups, processes) ==
-  [g \in groups |-> [ p \in processes |-> {} ]]
-
-LOCAL AppendMessage(channel, group, receiver, msg) ==
-  channel[group][receiver] \union {msg}
-
-LOCAL UpdateChannelLinks(channel, group, newGroupLinks) ==
-  [ g \in DOMAIN channel.links |->
-    IF g = group THEN newGroupLinks ELSE channel.links[g]
-  ]
+LOCAL CS == INSTANCE CrashStop
 
 Channel(groups, processes) ==
-  [links |-> InitChannel(groups, processes), crashed |-> {}]
+  [links |-> [g \in groups |-> [ p \in processes |-> {} ]]]
 
-IsCrashed(channel, process) ==
-  process \in channel.crashed
+HasMessage(channel, fm, group, process) ==
+  ~CS!IsCrashed(fm, process) /\ channel.links[group][process] /= {}
 
-CanCrash(channel) ==
-  Cardinality(channel.crashed) < MaxCrashes
-
-Crash(channel, process) ==
-  [channel EXCEPT !.crashed = channel.crashed \union {process}]
-
-HasMessage(channel, group, process) ==
-  ~IsCrashed(channel, process) /\ channel.links[group][process] /= {}
-
-Messages(channel, group, process) ==
-  IF IsCrashed(channel, process) THEN {}
+Messages(channel, fm, group, process) ==
+  IF CS!IsCrashed(fm, process) THEN {}
   ELSE channel.links[group][process]
 
-LOCAL BroadcastToSubset(channel, group, msg, receivers) ==
-  [ p \in DOMAIN channel.links[group] |->
-    IF p \in receivers THEN
-      AppendMessage(channel.links, group, p, msg)
-    ELSE
-      channel.links[group][p]
-  ]
+LOCAL DeliverTo(channel, group, msg, receivers) ==
+  [channel EXCEPT !.links[group] =
+    [ p \in DOMAIN channel.links[group] |->
+        IF p \in receivers
+        THEN channel.links[group][p] \union {msg}
+        ELSE channel.links[group][p] ]]
 
-Broadcast(channel, group, sender, msg) ==
-  IF IsCrashed(channel, sender) THEN {channel}
+\* A correct sender reaches every alive receiver (BEB1 - Validity). Reaching
+\* only a subset is possible solely when the sender crashes mid-broadcast
+\* (Cachin: only a faulty sender may reach a subset), so each partial
+\* delivery also records the sender's crash in the failure model, guarded by
+\* the crash budget. Broadcast therefore returns a set of records
+\* [channel |-> c, fm |-> f]; the caller picks one and updates both state
+\* variables from it:
+\*   \E out \in Broadcast(channel, fm, g, p, m): channel' = out.channel
+\*                                            /\ fm' = out.fm
+Broadcast(channel, fm, group, sender, msg) ==
+  IF CS!IsCrashed(fm, sender) THEN {[channel |-> channel, fm |-> fm]}
   ELSE
     LET aliveReceivers == { p \in DOMAIN channel.links[group] :
-                            ~IsCrashed(channel, p) }
-    IN
-    { [
-        links   |-> UpdateChannelLinks(channel, group,
-                       BroadcastToSubset(channel, group, msg, subset)),
-        crashed |-> channel.crashed
-      ] : subset \in SUBSET aliveReceivers }
+                            ~CS!IsCrashed(fm, p) }
+        fullDelivery ==
+          { [channel |-> DeliverTo(channel, group, msg, aliveReceivers),
+             fm      |-> fm] }
+        partialDelivery ==
+          IF ~CS!CanCrash(fm) THEN {}
+          ELSE { [channel |-> DeliverTo(channel, group, msg, subset),
+                  fm      |-> CS!Crash(fm, sender)]
+                 : subset \in SUBSET (aliveReceivers \ {sender}) }
+    IN fullDelivery \union partialDelivery
 
-Deliver(channel, group, process, msg) ==
-  IF IsCrashed(channel, process) THEN channel
-  ELSE
-    [
-      links   |-> [ channel.links EXCEPT
-                      ![group][process] = channel.links[group][process] \ {msg}
-                  ],
-      crashed |-> channel.crashed
-    ]
+Deliver(channel, fm, group, process, msg) ==
+  IF CS!IsCrashed(fm, process) THEN channel
+  ELSE [channel EXCEPT !.links[group][process] = channel.links[group][process] \ {msg}]
+
 =============================================================================
