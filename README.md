@@ -61,6 +61,7 @@ The `protocols/` directory contains protocol specifications written against the 
 
 - `protocols/echo/` contains the Echo protocol verified over three different links (`EchoPerfect`, `EchoStubborn`, `EchoFairLoss`), illustrating how the same protocol behaves under different reliability assumptions.
 - `protocols/DeferredUpdate.tla` specifies the Deferred Update Replication (DUR) protocol, combining `PerfectLinkFIFO` for client-server communication with `AtomicBroadcast` for replica coordination.
+- `protocols/hermes/` rebuilds the Hermes replication protocol (Katsarakis et al., ASPLOS 2020) on top of `ReliableBroadcast` and `PerfectLink`, with five TLC scenario configurations (read-only, single-writer, concurrent, with and without crashes) checking its safety invariants, a crash-stop invariant, and a write-termination liveness property. `protocols/hermes/upstream/` vendors the unmodified upstream `Hermes.tla` (Apache-2.0) together with a scenario harness (`HermesScenarios.tla`) that reassembles the original actions under the same scenario dials, used for the side-by-side comparison of model-checking cost.
 
 ## Publications
 
