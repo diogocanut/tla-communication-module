@@ -2,7 +2,7 @@
 EXTENDS Integers, Sequences, FiniteSets, TLC
 
 INSTANCE ReliableBroadcast
-INSTANCE CrashStop WITH MaxCrashes <- 1
+INSTANCE CrashStop
 
 CONSTANTS Groups, Processes, totalCounter
 
@@ -16,7 +16,7 @@ CorrectProcesses == { p \in Processes : ~IsCrashed(fm, p) }
 
 Init ==
   /\ channel = Channel(Groups, Processes)
-  /\ fm = CrashStop
+  /\ fm = CrashStop(1)
   /\ counter = 0
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]

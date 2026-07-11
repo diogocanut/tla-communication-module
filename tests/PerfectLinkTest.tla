@@ -1,7 +1,7 @@
 --------------------------- MODULE PerfectLinkTest ---------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC, PerfectLink, CrashStop
 
-CONSTANTS Processes, totalCounter
+CONSTANTS Processes, totalCounter, MaxCrashes
 
 VARIABLES link, fm, counter, sent, received, receivedOrdered, sentTo
 
@@ -13,7 +13,7 @@ CorrectProcesses == { p \in Processes : ~IsCrashed(fm, p) }
 
 Init ==
   /\ link = PerfectLink(Processes, Processes)
-  /\ fm = CrashStop
+  /\ fm = CrashStop(MaxCrashes)
   /\ counter = 0
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]

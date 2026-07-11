@@ -1,16 +1,14 @@
 ------------------------------- MODULE CrashStop -------------------------------
 EXTENDS Naturals, FiniteSets
 
-CONSTANT MaxCrashes
-
-
-CrashStop == [crashed |-> {}]
+CrashStop(maxCrashes) ==
+    [crashed |-> {}, max |-> maxCrashes]
 
 IsCrashed(fm, process) ==
     process \in fm.crashed
 
 CanCrash(fm) ==
-    Cardinality(fm.crashed) < MaxCrashes
+    Cardinality(fm.crashed) < fm.max
 
 Crash(fm, process) ==
     [fm EXCEPT !.crashed = fm.crashed \union {process}]

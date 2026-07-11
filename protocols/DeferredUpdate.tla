@@ -1,13 +1,13 @@
 ----------------------------- MODULE DeferredUpdate -----------------------------
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
-CS  == INSTANCE CrashStop WITH MaxCrashes <- 0
+CS == INSTANCE CrashStop
 PLF == INSTANCE PerfectLinkFIFO
 ABC == INSTANCE AtomicBroadcast
 
 \* Failure-free scenario: the failure model is a constant value in which no
 \* process ever crashes.
-fm == CS!CrashStop
+fm == CS!CrashStop(0)
 
 CONSTANTS
     Transactions,

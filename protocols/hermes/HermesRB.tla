@@ -31,7 +31,7 @@ CONSTANTS   H_NODES,
             H_MAX_VERSION,
             H_MAX_CRASHES
 
-CS == INSTANCE CrashStop WITH MaxCrashes <- H_MAX_CRASHES
+CS == INSTANCE CrashStop
 RB == INSTANCE ReliableBroadcast
 PL == INSTANCE PerfectLink
 
@@ -88,7 +88,7 @@ isAlive(n) == n \in aliveNodes
 HInit ==
     /\  channel          = RB!Channel({InvGroup, ValGroup}, H_NODES)
     /\  link             = PL!PerfectLink(H_NODES, H_NODES)
-    /\  fm               = CS!CrashStop
+    /\  fm               = CS!CrashStop(H_MAX_CRASHES)
     /\  epochID          = 0
     /\  aliveNodes       = H_NODES
     /\  nodeWriteEpochID = [n \in H_NODES |-> 0]

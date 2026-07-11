@@ -1,8 +1,6 @@
 ------------------------- MODULE BestEffortBroadcast -------------------------
 EXTENDS Integers, FiniteSets, Sequences
 
-CONSTANT MaxCrashes
-
 LOCAL CS == INSTANCE CrashStop
 
 Channel(groups, processes) ==
