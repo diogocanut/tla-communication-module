@@ -1,8 +1,8 @@
 ------------------------- MODULE BestEffortBroadcastTest -------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC
 
-INSTANCE BestEffortBroadcast WITH MaxCrashes <- 1
-INSTANCE CrashStop WITH MaxCrashes <- 1
+INSTANCE BestEffortBroadcast
+INSTANCE CrashStop
 
 CONSTANTS Groups, Processes, totalCounter
 
@@ -16,7 +16,7 @@ CorrectProcesses == { p \in Processes : ~IsCrashed(fm, p) }
 
 Init ==
   /\ channel = Channel(Groups, Processes)
-  /\ fm = CrashStop
+  /\ fm = CrashStop(1)
   /\ counter = 0
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]
@@ -88,9 +88,6 @@ TypeOK ==
 
 \* (BEB1 - Validity) If a correct process broadcasts m, every correct process eventually delivers m.
 \* A correct process is one that never crashes throughout the entire execution.
-\* Note the trigger sits under [] (Response under Globally): a plain state
-\* predicate outside a temporal operator would be evaluated in the initial
-\* state only, making the property vacuously true.
 PropertyValidity ==
   \A p, q \in Processes:
     \A m \in MessagesToSend:

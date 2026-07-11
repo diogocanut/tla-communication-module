@@ -7,7 +7,7 @@ EXTENDS Integers, Sequences, TLC, FiniteSets, FairLossLink, CrashStop
   MaxCrashes bounds process crashes (orthogonal to drops).
 *)
 
-CONSTANTS Processes, totalCounter
+CONSTANTS Processes, totalCounter, MaxCrashes
 
 VARIABLES link, fm, counter, sent, received, pending
 
@@ -19,7 +19,7 @@ CorrectProcesses == { p \in Processes : ~IsCrashed(fm, p) }
 
 Init ==
   /\ link = FairLossLink(Processes, Processes)
-  /\ fm = CrashStop
+  /\ fm = CrashStop(MaxCrashes)
   /\ counter = 0
   /\ sent = [s \in Processes |-> [r \in Processes |-> {}]]
   /\ received = [p \in Processes |-> {}]

@@ -6,3 +6,7 @@
 .clj-kondo/
 .DS_Store
 *.bin
+scale-results/
+*.st
+*_TTrace_*
+*.dvi

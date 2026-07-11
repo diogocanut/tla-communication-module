@@ -3,7 +3,7 @@ EXTENDS Integers, Sequences, FiniteSets
 
 CONSTANT MaxDrops
 
-LOCAL IsCrashed(fm, process) == process \in fm.crashed
+LOCAL CS == INSTANCE CrashStop
 
 LOCAL InitLink(senders, receivers) ==
     [links |-> [s \in senders |-> [ r \in receivers |-> {} ]],
@@ -22,22 +22,22 @@ LOCAL DropMessage(link) ==
 FairLossLink(senders, receivers) == InitLink(senders, receivers)
 
 HasMessage(link, fm, sender, receiver) ==
-    /\ ~IsCrashed(fm, receiver)
+    /\ ~CS!IsCrashed(fm, receiver)
     /\ link.links[sender][receiver] /= {}
 
 Messages(link, fm, sender, receiver) ==
-    IF IsCrashed(fm, receiver) THEN {}
+    IF CS!IsCrashed(fm, receiver) THEN {}
     ELSE link.links[sender][receiver]
 
 \* Non-deterministic send: returns SET of possible next states (can deliver or drop).
 \* If either endpoint has crashed, the send is a no-op.
 Send(link, fm, sender, receiver, msg) ==
-    IF IsCrashed(fm, sender) \/ IsCrashed(fm, receiver) THEN {link}
+    IF CS!IsCrashed(fm, sender) \/ CS!IsCrashed(fm, receiver) THEN {link}
     ELSE {ReliableSend(link, sender, receiver, msg)} \union
          (IF ShouldDrop(link) THEN {DropMessage(link)} ELSE {})
 
 Receive(link, fm, sender, receiver, msg) ==
-    IF IsCrashed(fm, receiver) THEN link
+    IF CS!IsCrashed(fm, receiver) THEN link
     ELSE [link EXCEPT !.links[sender][receiver] = link.links[sender][receiver] \ {msg}]
 
 =============================================================================

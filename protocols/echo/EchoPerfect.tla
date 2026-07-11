@@ -1,12 +1,12 @@
 -------------------------- MODULE EchoPerfect --------------------------
 EXTENDS Integers, Sequences, TLC
 
-CS == INSTANCE CrashStop WITH MaxCrashes <- 0
+CS == INSTANCE CrashStop
 PL == INSTANCE PerfectLinkFIFO
 
 \* Failure-free scenario: the failure model is a constant value in which no
 \* process ever crashes.
-fm == CS!CrashStop
+fm == CS!CrashStop(0)
 
 Processes == {"A", "B"}
 MessagesToSend == {1, 2, 3, 4, 5, -1}

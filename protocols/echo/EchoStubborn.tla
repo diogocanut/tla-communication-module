@@ -1,12 +1,12 @@
 -------------------------- MODULE EchoStubborn --------------------------
 EXTENDS Integers, Sequences, TLC
 
-CS == INSTANCE CrashStop WITH MaxCrashes <- 0
+CS == INSTANCE CrashStop
 SL == INSTANCE StubbornLink WITH MaxCopies <- 2
 
 \* Failure-free scenario: the failure model is a constant value in which no
 \* process ever crashes.
-fm == CS!CrashStop
+fm == CS!CrashStop(0)
 
 Processes == {"A", "B"}
 MessagesToSend == {1, 2, -1}
