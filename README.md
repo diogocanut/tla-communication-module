@@ -1,6 +1,6 @@
 # TLA+ Communication Module
 
-A reusable and modular TLA+ library for modeling communication primitives over point-to-point and broadcast abstractions. It enables designers to formally describe and verify distributed protocols by composing these primitives as building blocks. Each module exposes a small, uniform API (`Send`/`Broadcast`, `Receive`/`Deliver`, `HasMessage`, `Messages`) together with a crash-stop failure model, allowing protocols to be specified once and verified against communication channels with different reliability guarantees.
+A reusable and modular TLA+ library for modeling communication primitives over point-to-point and broadcast abstractions. It enables designers to formally describe and verify distributed protocols by composing these primitives as building blocks. Each module exposes a small, uniform API (`Send`/`Broadcast`, `Receive`/`Deliver`, `HasMessage`, `Messages`), and process failures are modeled by a dedicated `CrashStop` module whose failure-model value is passed to every channel operator, allowing protocols to be specified once and verified against communication channels with different reliability guarantees.
 
 ## Reliability hierarchy
 
@@ -16,7 +16,15 @@ PerfectLinkFIFO      AtomicBroadcast
  FairLossLink
 ```
 
-Within each hierarchy, weaker modules expose failures explicitly (message loss, duplication, reordering), while stronger ones eliminate them. The broadcast modules specify their guarantees directly over an abstract channel rather than implementing them on top of point-to-point links. Every module shares a crash-stop interface (`IsCrashed`, `CanCrash`, `Crash`), bounded by a `MaxCrashes` constant.
+Within each hierarchy, weaker modules expose failures explicitly (message loss, duplication, reordering), while stronger ones eliminate them. The broadcast modules specify their guarantees directly over an abstract channel rather than implementing them on top of point-to-point links.
+
+## Crash-stop failure model
+
+Process failures follow the crash-stop process abstraction of Cachin, Guerraoui & Rodrigues and live in a dedicated `CrashStop` module, separate from the channels: crashing is a property of a process, not of any one channel. A specification declares a single failure-model value, constructed with its crash budget (`fm = CrashStop(maxCrashes)`), and passes it to every channel operator; the module exposes `IsCrashed`, `CanCrash`, and `Crash`, with the budget carried inside the value itself (`fm.max`) — no module declares a failure constant. Because the value is shared, all channels in a specification observe the same set of crashed processes, and a crash is recorded exactly once no matter how many primitives the protocol composes. `BestEffortBroadcast` is the one channel that can itself cause a crash (a sender halting mid-broadcast may reach only a subset of receivers), so its `Broadcast` returns `[channel |-> c, fm |-> f]` records carrying both updated values.
+
+## Message payloads
+
+The set-based modules (`FairLossLink`, `StubbornLink`, `PerfectLink`, `BestEffortBroadcast`, `ReliableBroadcast`) store in-flight messages in sets, so sending the same payload twice to the same destination collapses into a single delivery. Give messages distinguishing fields (an id, a sequence number, the sender) if repeated sends must be delivered repeatedly. The sequence-based modules (`PerfectLinkFIFO`, `AtomicBroadcast`) do not have this constraint.
 
 ## Project structure
 
@@ -53,6 +61,7 @@ The `protocols/` directory contains protocol specifications written against the 
 
 - `protocols/echo/` contains the Echo protocol verified over three different links (`EchoPerfect`, `EchoStubborn`, `EchoFairLoss`), illustrating how the same protocol behaves under different reliability assumptions.
 - `protocols/DeferredUpdate.tla` specifies the Deferred Update Replication (DUR) protocol, combining `PerfectLinkFIFO` for client-server communication with `AtomicBroadcast` for replica coordination.
+- `protocols/hermes/` rebuilds the Hermes replication protocol (Katsarakis et al., ASPLOS 2020) on top of `ReliableBroadcast` and `PerfectLink`, with five TLC scenario configurations (read-only, single-writer, concurrent, with and without crashes) checking its safety invariants, a crash-stop invariant, and a write-termination liveness property. `protocols/hermes/upstream/` vendors the unmodified upstream `Hermes.tla` (Apache-2.0) together with a scenario harness (`HermesScenarios.tla`) that reassembles the original actions under the same scenario dials, used for the side-by-side comparison of model-checking cost.
 
 ## Publications
 

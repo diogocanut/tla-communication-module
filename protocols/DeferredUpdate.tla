@@ -1,8 +1,13 @@
 ----------------------------- MODULE DeferredUpdate -----------------------------
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
-PLF == INSTANCE PerfectLinkFIFO WITH MaxCrashes <- 0
-ABC == INSTANCE AtomicBroadcast WITH MaxCrashes <- 0
+CS == INSTANCE CrashStop
+PLF == INSTANCE PerfectLinkFIFO
+ABC == INSTANCE AtomicBroadcast
+
+\* Failure-free scenario: the failure model is a constant value in which no
+\* process ever crashes.
+fm == CS!CrashStop(0)
 
 CONSTANTS
     Transactions,
@@ -78,7 +83,7 @@ TransactionCommit(t) ==
             rs            |-> readSet[t],
             ws            |-> writeSet[t]
        ] IN
-        /\ abcastQueue' = ABC!Broadcast(abcastQueue, "g1", t, tx)
+        /\ abcastQueue' = ABC!Broadcast(abcastQueue, fm, "g1", t, tx)
         /\ sent' = [sent EXCEPT ![t] =  {tx} \cup sent[t]]
         /\ outcomes' = [outcomes EXCEPT ![t] = "pending"]
         /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
@@ -92,13 +97,13 @@ TransactionRead(t, op, s) ==
 
     \/ /\ ~HasWritten(t, op.key)
        /\ pendingRead[t] = NULL
-       /\ c2s' = PLF!Send(c2s, t, s, [type |-> "read", key |-> op.key])
+       /\ c2s' = PLF!Send(c2s, fm, t, s, [type |-> "read", key |-> op.key])
        /\ pendingRead' = [pendingRead EXCEPT ![t] = 1]
        /\ UNCHANGED <<db, s2c, abcastQueue, outcomes, operations, writeSet, readSet, pc, sent, received, decided, decidedOrder>>
 
-  \/ /\ PLF!HasMessage(s2c, s, t)
-     /\ \E msg \in PLF!Messages(s2c, s, t):
-          /\ s2c' = PLF!Receive(s2c, s, t)
+  \/ /\ PLF!HasMessage(s2c, fm, s, t)
+     /\ \E msg \in PLF!Messages(s2c, fm, s, t):
+          /\ s2c' = PLF!Receive(s2c, fm, s, t)
           /\ readSet' = [readSet EXCEPT ![t] = Append(readSet[t], <<msg.key, msg.value, msg.version>>)]
           /\ pc' = [pc EXCEPT ![t] = pc[t] + 1]
           /\ pendingRead' = [pendingRead EXCEPT ![t] = NULL]
@@ -137,21 +142,21 @@ ApplyWrites(db_s, ws) ==
     ]
 
 ServerApplyCommit(s) ==
-  /\ ABC!HasMessage(abcastQueue, "g1", s)
-  /\ \E tx \in ABC!Messages(abcastQueue, "g1", s):
-    /\ abcastQueue' = ABC!Deliver(abcastQueue, "g1", s)
+  /\ ABC!HasMessage(abcastQueue, fm, "g1", s)
+  /\ \E tx \in ABC!Messages(abcastQueue, fm, "g1", s):
+    /\ abcastQueue' = ABC!Deliver(abcastQueue, fm, "g1", s)
     /\ received' = [received EXCEPT ![tx.transaction] = {tx} 
               \cup received[tx.transaction]]
     /\ IF Valid(tx, s)
       THEN 
         /\ db' = [db EXCEPT ![s] = ApplyWrites(db[s], tx.ws)]
-        /\ s2c' = PLF!Send( s2c, s, tx.transaction,
+        /\ s2c' = PLF!Send(s2c, fm, s, tx.transaction,
             [ type    |-> "commitResponse",
               outcome |-> "committed"])
         /\ decided' = [decided EXCEPT ![s][tx.transaction] = "committed"]
       ELSE
         /\ UNCHANGED db
-        /\ s2c' = PLF!Send(s2c, s, tx.transaction,
+        /\ s2c' = PLF!Send(s2c, fm, s, tx.transaction,
             [ type    |-> "commitResponse",
               outcome |-> "aborted"])
         /\ decided' = [decided EXCEPT ![s][tx.transaction] = "aborted"]
@@ -163,18 +168,18 @@ TransactionOutcome(t) ==
   /\ t \in Transactions
   /\ outcomes[t] = "pending"
   /\ \E s \in Servers:
-    /\ PLF!HasMessage(s2c, s, t)
-    /\ \E msg \in PLF!Messages(s2c, s, t):
-      /\ s2c' = PLF!Receive(s2c, s, t)
+    /\ PLF!HasMessage(s2c, fm, s, t)
+    /\ \E msg \in PLF!Messages(s2c, fm, s, t):
+      /\ s2c' = PLF!Receive(s2c, fm, s, t)
       /\ msg.type = "commitResponse"
       /\ outcomes' = [outcomes EXCEPT ![t] = msg.outcome]
       /\ UNCHANGED <<db, c2s, abcastQueue, writeSet, readSet, pc, operations, pendingRead, sent, received, decided, decidedOrder>>
 
 ServerRespondRead(s) ==
   \E t \in Transactions :
-    /\ PLF!HasMessage(c2s, t, s)
-    /\ \E msg \in PLF!Messages(c2s, t, s):
-      /\ c2s' = PLF!Receive(c2s, t, s)
+    /\ PLF!HasMessage(c2s, fm, t, s)
+    /\ \E msg \in PLF!Messages(c2s, fm, t, s):
+      /\ c2s' = PLF!Receive(c2s, fm, t, s)
       /\ IF msg.type = "read"
          THEN
            LET k == msg.key IN
@@ -184,7 +189,7 @@ ServerRespondRead(s) ==
              value   |-> db[s][k].val,
              version |-> db[s][k].ver
            ] IN
-           /\ s2c' = PLF!Send(s2c, s, t, response)
+           /\ s2c' = PLF!Send(s2c, fm, s, t, response)
          ELSE
            /\ UNCHANGED s2c
       /\ UNCHANGED <<db, abcastQueue, outcomes, writeSet, readSet, operations, pc, pendingRead, sent, received, decided, decidedOrder>>

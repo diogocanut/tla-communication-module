@@ -1,60 +1,32 @@
 -------------------------- MODULE AtomicBroadcast --------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC
 
-CONSTANT MaxCrashes
+LOCAL CS == INSTANCE CrashStop
 
-Channel(groups, processes) == 
-  [links |-> [g \in groups |-> [p \in processes |-> <<>>]], crashed |-> {}]
+Channel(groups, processes) ==
+  [links |-> [g \in groups |-> [p \in processes |-> <<>>]]]
 
-IsCrashed(channel, process) ==
-  process \in channel.crashed
+HasMessage(channel, fm, group, process) ==
+  ~CS!IsCrashed(fm, process) /\ channel.links[group][process] /= <<>>
 
-CanCrash(channel) ==
-  Cardinality(channel.crashed) < MaxCrashes
-
-Crash(channel, process) ==
-  [channel EXCEPT !.crashed = channel.crashed \union {process}]
-
-HasMessage(channel, group, process) ==
-  ~IsCrashed(channel, process) /\ channel.links[group][process] /= <<>>
-
-Messages(channel, group, process) ==
-  IF IsCrashed(channel, process) THEN {}
+Messages(channel, fm, group, process) ==
+  IF CS!IsCrashed(fm, process) THEN {}
   ELSE IF channel.links[group][process] = <<>> THEN {}
   ELSE {Head(channel.links[group][process])}
 
-Deliver(channel, group, process) ==
-  IF IsCrashed(channel, process) THEN channel
-  ELSE
-    [
-      links   |-> [ g \in DOMAIN channel.links |->
-                      IF g = group THEN
-                        [ p \in DOMAIN channel.links[g] |->
-                            IF p = process THEN Tail(channel.links[g][p])
-                            ELSE channel.links[g][p]
-                        ]
-                      ELSE channel.links[g]
-                  ],
-      crashed |-> channel.crashed
-    ]
+Deliver(channel, fm, group, process) ==
+  IF CS!IsCrashed(fm, process) THEN channel
+  ELSE [channel EXCEPT !.links[group][process] = Tail(@)]
 
-Broadcast(channel, group, sender, msg) ==
-  IF IsCrashed(channel, sender) THEN channel
+Broadcast(channel, fm, group, sender, msg) ==
+  IF CS!IsCrashed(fm, sender) THEN channel
   ELSE
     LET aliveReceivers == { p \in DOMAIN channel.links[group] :
-                            ~IsCrashed(channel, p) }
-    IN
-    [
-      links   |-> [ g \in DOMAIN channel.links |->
-                      IF g = group THEN
-                        [ p \in DOMAIN channel.links[g] |->
-                            IF p \in aliveReceivers THEN
-                              Append(channel.links[g][p], msg)
-                            ELSE channel.links[g][p]
-                        ]
-                      ELSE channel.links[g]
-                  ],
-      crashed |-> channel.crashed
-    ]
+                            ~CS!IsCrashed(fm, p) }
+    IN [channel EXCEPT !.links[group] =
+         [ p \in DOMAIN channel.links[group] |->
+             IF p \in aliveReceivers
+             THEN Append(channel.links[group][p], msg)
+             ELSE channel.links[group][p] ]]
 
 =============================================================================

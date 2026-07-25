@@ -1,20 +1,22 @@
 --------------------------- MODULE AtomicBroadcastTest ---------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC
 
-INSTANCE AtomicBroadcast WITH MaxCrashes <- 1
+INSTANCE AtomicBroadcast
+INSTANCE CrashStop
 
 CONSTANTS Groups, Processes, totalCounter
 
-VARIABLES channel, counter, sent, received, receivedOrdered
+VARIABLES channel, fm, counter, sent, received, receivedOrdered
 
-vars == <<channel, counter, sent, received, receivedOrdered>>
+vars == <<channel, fm, counter, sent, received, receivedOrdered>>
 
 MessagesToSend == 1 .. totalCounter
 
-CorrectProcesses == { p \in Processes : ~IsCrashed(channel, p) }
+CorrectProcesses == { p \in Processes : ~IsCrashed(fm, p) }
 
 Init ==
   /\ channel = Channel(Groups, Processes)
+  /\ fm = CrashStop(1)
   /\ counter = 0
   /\ sent = [p \in Processes |-> {}]
   /\ received = [p \in Processes |-> {}]
@@ -22,35 +24,36 @@ Init ==
 
 ProcessSend ==
   \E p \in Processes:
-    /\ ~IsCrashed(channel, p)
+    /\ ~IsCrashed(fm, p)
     /\ counter < totalCounter
     /\ LET msg == counter + 1 IN
-        /\ channel' = Broadcast(channel, "g1", p, msg)
+        /\ channel' = Broadcast(channel, fm, "g1", p, msg)
         /\ counter' = counter + 1
         /\ sent' = [sent EXCEPT ![p] = sent[p] \cup {msg}]
-        /\ UNCHANGED <<received, receivedOrdered>>
+        /\ UNCHANGED <<fm, received, receivedOrdered>>
 
 ProcessReceive ==
     \E p \in Processes:
-      /\ HasMessage(channel, "g1", p)
-      /\ \E m \in Messages(channel, "g1", p):
+      /\ HasMessage(channel, fm, "g1", p)
+      /\ \E m \in Messages(channel, fm, "g1", p):
           /\ received' = [received EXCEPT ![p] = received[p] \cup {m}]
           /\ receivedOrdered' = [receivedOrdered EXCEPT ![p] = Append(receivedOrdered[p], m)]
-          /\ channel' = Deliver(channel, "g1", p)
-          /\ UNCHANGED <<counter, sent>>
+          /\ channel' = Deliver(channel, fm, "g1", p)
+          /\ UNCHANGED <<fm, counter, sent>>
 
 Termination ==
   /\ counter = totalCounter
-  /\ \A p \in CorrectProcesses: ~HasMessage(channel, "g1", p)
+  /\ \A p \in CorrectProcesses: ~HasMessage(channel, fm, "g1", p)
   /\ UNCHANGED vars
 
-\* Crash-stop model from Cachin
+\* Crash-stop model from Cachin: the crash is recorded once, in the shared
+\* failure model; the channel itself is untouched.
 ProcessCrash ==
   \E p \in Processes:
-    /\ ~IsCrashed(channel, p)
-    /\ CanCrash(channel)
-    /\ channel' = Crash(channel, p)
-    /\ UNCHANGED <<counter, sent, received, receivedOrdered>>
+    /\ ~IsCrashed(fm, p)
+    /\ CanCrash(fm)
+    /\ fm' = Crash(fm, p)
+    /\ UNCHANGED <<channel, counter, sent, received, receivedOrdered>>
 
 Next ==
   \/ ProcessSend
@@ -58,17 +61,21 @@ Next ==
   \/ ProcessCrash
   \/ Termination
 
+\* Fairness convention (paper, Properties under Crash): weak fairness on the
+\* consumer-side actions only. A receive stays enabled while a message waits
+\* (the message cannot vanish), so WF forces eventual delivery; sends and
+\* crashes are choices and get no fairness. The liveness properties are
+\* conditional on their triggers, so behaviors that never send satisfy them
+\* trivially.
 Spec == Init /\ [][Next]_vars
-             /\ WF_vars(Next)
-             /\ SF_vars(ProcessSend)
-             /\ SF_vars(ProcessReceive)
+             /\ WF_vars(ProcessReceive)
 
 \* Type invariant
 TypeOK ==
   /\ counter \in 0..totalCounter
   /\ \A p \in Processes: sent[p] \subseteq MessagesToSend
   /\ \A p \in Processes: received[p] \subseteq MessagesToSend
-  /\ channel.crashed \subseteq Processes
+  /\ fm.crashed \subseteq Processes
   /\ \A g \in Groups: \A p \in Processes:
        \A i \in 1..Len(channel.links[g][p]): channel.links[g][p][i] \in MessagesToSend
 
@@ -76,18 +83,20 @@ TypeOK ==
 \* Total Order Broadcast properties (Defago 1998)
 
 \* (VALIDITY) If a correct process TO-broadcasts m, every correct process eventually TO-delivers m.
+\* Note the trigger sits under [] (Response under Globally): a plain state
+\* predicate outside a temporal operator would be evaluated in the initial
+\* state only, making the property vacuously true.
 PropertyValidity ==
-  \A p \in Processes:
+  \A p, q \in Processes:
     \A m \in MessagesToSend:
-      (m \in sent[p] /\ [](~IsCrashed(channel, p)))
-        => \A q \in Processes:
-             [](~IsCrashed(channel, q)) => <>(m \in received[q])
+      ([](~IsCrashed(fm, p)) /\ [](~IsCrashed(fm, q)))
+        => [](m \in sent[p] => <>(m \in received[q]))
 
 \* (UNIFORM AGREEMENT) If a process TO-delivers m, all correct processes eventually TO-deliver m.
 PropertyUniformAgreement ==
   \A m \in MessagesToSend:
     \A p1, p2 \in Processes:
-      [](~IsCrashed(channel, p2))
+      [](~IsCrashed(fm, p2))
         => [](m \in received[p1] => <>(m \in received[p2]))
 
 Delivered(p, m) ==
@@ -118,7 +127,7 @@ DeliveredBefore(p, m1, m2) ==
 PropertyUniformTotalOrder ==
   \A m1, m2 \in MessagesToSend :
     \A p1, p2 \in Processes :
-      (m1 # m2) /\ (p1 # p2) /\ [](~IsCrashed(channel, p2)) =>
+      (m1 # m2) /\ (p1 # p2) /\ [](~IsCrashed(fm, p2)) =>
         []( Delivered(p1,m1) /\ Delivered(p1,m2) /\ DeliveredBefore(p1,m1,m2)
             => <>DeliveredBefore(p2,m1,m2) )
 
