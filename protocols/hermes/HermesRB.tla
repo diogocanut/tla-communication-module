@@ -312,7 +312,7 @@ HCrashStop ==
 PropertyWriteTermination ==
     \A n \in H_NODES:
         ([](n \in aliveNodes))
-            => ((nodeState[n] \in {"write", "replay"}) ~> (nodeState[n] = "valid"))
+            => [](nodeState[n] \in {"write", "replay"} => <>(nodeState[n] = "valid"))
 
 THEOREM H_Spec =>([]HTypeOK) /\ ([]HConsistent) /\ ([]HCrashStop) /\ PropertyWriteTermination
 
