@@ -1,10 +1,10 @@
--------------------------- MODULE EchoFairLoss --------------------------
+-------------------------- MODULE EchoStubbornNaive --------------------------
 EXTENDS Integers, Sequences, TLC
 
-CONSTANTS NumMessages, MaxDrops
+CONSTANTS NumMessages, MaxCopies
 
 CS == INSTANCE CrashStop
-FL == INSTANCE FairLossLink
+SL == INSTANCE StubbornLink
 
 \* Failure-free scenario: the failure model is a constant value in which no
 \* process ever crashes.
@@ -24,7 +24,7 @@ vars == <<link, toSend, sentMessagesA, messageToSend,
           receivedMessageA, receivedMessageB, aWaiting, bPending>>
 
 Init ==
-  /\ link = FL!FairLossLink(Processes, Processes)
+  /\ link = SL!StubbornLink(Processes, Processes)
   /\ toSend = Workload
   /\ sentMessagesA = {}
   /\ messageToSend = 0
@@ -37,8 +37,7 @@ SendA ==
   /\ ~aWaiting
   /\ toSend /= <<>>
   /\ messageToSend' = Head(toSend)
-  /\ \E newLink \in FL!Send(link, fm, "A", "B", messageToSend'):
-       link' = newLink
+  /\ link' = SL!Send(link, fm, "A", "B", messageToSend')
   /\ sentMessagesA' = sentMessagesA \cup {messageToSend'}
   /\ toSend' = Tail(toSend)
   /\ aWaiting' = TRUE
@@ -46,26 +45,25 @@ SendA ==
 
 ReceiveA ==
   /\ aWaiting
-  /\ FL!HasMessage(link, fm, "B", "A")
-  /\ \E m \in FL!Messages(link, fm, "B", "A"):
-       /\ link' = FL!Receive(link, fm, "B", "A", m)
+  /\ SL!HasMessage(link, fm, "B", "A")
+  /\ \E m \in SL!Messages(link, fm, "B", "A"):
+       /\ link' = SL!Receive(link, fm, "B", "A", m)
        /\ receivedMessageA' = m
   /\ aWaiting' = FALSE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB, bPending>>
 
 ReceiveB ==
   /\ ~bPending
-  /\ FL!HasMessage(link, fm, "A", "B")
-  /\ \E m \in FL!Messages(link, fm, "A", "B"):
-       /\ link' = FL!Receive(link, fm, "A", "B", m)
+  /\ SL!HasMessage(link, fm, "A", "B")
+  /\ \E m \in SL!Messages(link, fm, "A", "B"):
+       /\ link' = SL!Receive(link, fm, "A", "B", m)
        /\ receivedMessageB' = m
   /\ bPending' = TRUE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, aWaiting>>
 
 EchoB ==
   /\ bPending
-  /\ \E newLink \in FL!Send(link, fm, "B", "A", receivedMessageB):
-       link' = newLink
+  /\ link' = SL!Send(link, fm, "B", "A", receivedMessageB)
   /\ bPending' = FALSE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, receivedMessageB, aWaiting>>
 

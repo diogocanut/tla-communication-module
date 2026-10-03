@@ -1,7 +1,7 @@
--------------------------- MODULE EchoPerfect --------------------------
+-------------------------- MODULE EchoPipelined --------------------------
 EXTENDS Integers, Sequences, TLC
 
-CONSTANTS NumMessages
+CONSTANTS NumMessages, Window
 
 CS == INSTANCE CrashStop
 PL == INSTANCE PerfectLinkFIFO
@@ -16,41 +16,34 @@ Fin == -1
 MessagesToSend == (1 .. NumMessages) \cup {Fin}
 Workload == [i \in 1 .. NumMessages |-> i] \o <<Fin>>
 
-VARIABLES link, toSend, sentMessagesA, messageToSend,
-          receivedMessageA, receivedMessageB,
-          aWaiting, bPending
+VARIABLES link, toSend, sentA, receivedA, receivedMessageB, bPending
 
-vars == <<link, toSend, sentMessagesA, messageToSend,
-          receivedMessageA, receivedMessageB, aWaiting, bPending>>
+vars == <<link, toSend, sentA, receivedA, receivedMessageB, bPending>>
+
+Range(seq) == { seq[i] : i \in 1 .. Len(seq) }
 
 Init ==
   /\ link = PL!PerfectLinkFIFO(Processes, Processes)
   /\ toSend = Workload
-  /\ sentMessagesA = {}
-  /\ messageToSend = 0
-  /\ receivedMessageA = 0
+  /\ sentA = <<>>
+  /\ receivedA = <<>>
   /\ receivedMessageB = 0
-  /\ aWaiting = FALSE
   /\ bPending = FALSE
 
 SendA ==
-  /\ ~aWaiting
   /\ toSend /= <<>>
-  /\ messageToSend' = Head(toSend)
-  /\ link' = PL!Send(link, fm, "A", "B", messageToSend')
-  /\ sentMessagesA' = sentMessagesA \cup {messageToSend'}
+  /\ Len(sentA) - Len(receivedA) < Window
+  /\ link' = PL!Send(link, fm, "A", "B", Head(toSend))
+  /\ sentA' = Append(sentA, Head(toSend))
   /\ toSend' = Tail(toSend)
-  /\ aWaiting' = TRUE
-  /\ UNCHANGED <<receivedMessageA, receivedMessageB, bPending>>
+  /\ UNCHANGED <<receivedA, receivedMessageB, bPending>>
 
 ReceiveA ==
-  /\ aWaiting
   /\ PL!HasMessage(link, fm, "B", "A")
   /\ \E m \in PL!Messages(link, fm, "B", "A"):
        /\ link' = PL!Receive(link, fm, "B", "A")
-       /\ receivedMessageA' = m
-  /\ aWaiting' = FALSE
-  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB, bPending>>
+       /\ receivedA' = Append(receivedA, m)
+  /\ UNCHANGED <<toSend, sentA, receivedMessageB, bPending>>
 
 ReceiveB ==
   /\ ~bPending
@@ -59,17 +52,17 @@ ReceiveB ==
        /\ link' = PL!Receive(link, fm, "A", "B")
        /\ receivedMessageB' = m
   /\ bPending' = TRUE
-  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, aWaiting>>
+  /\ UNCHANGED <<toSend, sentA, receivedA>>
 
 EchoB ==
   /\ bPending
   /\ link' = PL!Send(link, fm, "B", "A", receivedMessageB)
   /\ bPending' = FALSE
-  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, receivedMessageB, aWaiting>>
+  /\ UNCHANGED <<toSend, sentA, receivedA, receivedMessageB>>
 
 Done ==
   /\ toSend = <<>>
-  /\ ~aWaiting
+  /\ Len(receivedA) = Len(sentA)
   /\ ~bPending
   /\ UNCHANGED vars
 
@@ -87,12 +80,15 @@ Spec == Init /\ [][Next]_vars
              /\ WF_vars(EchoB)
 
 PropertyEcho ==
-    \A m \in MessagesToSend : [](messageToSend = m => <>(receivedMessageA = m))
+    \A m \in MessagesToSend : [](m \in Range(sentA) => <>(m \in Range(receivedA)))
 
 PropertyTermination ==
-    <>(receivedMessageB = Fin /\ receivedMessageA = Fin)
+    <>(Len(receivedA) = Len(Workload))
 
-PropertyNoCreation ==
-    \A m \in MessagesToSend : [](receivedMessageA = m => m \in sentMessagesA)
+InvariantNoCreation ==
+    Range(receivedA) \subseteq Range(sentA)
+
+InvariantEchoOrder ==
+    receivedA = SubSeq(sentA, 1, Len(receivedA))
 
 =============================================================================
