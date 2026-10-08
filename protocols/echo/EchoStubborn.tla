@@ -1,15 +1,20 @@
 -------------------------- MODULE EchoStubborn --------------------------
 EXTENDS Integers, Sequences, TLC
 
+CONSTANTS NumMessages, MaxCopies
+
 CS == INSTANCE CrashStop
-SL == INSTANCE StubbornLink WITH MaxCopies <- 2
+SL == INSTANCE StubbornLink
 
 \* Failure-free scenario: the failure model is a constant value in which no
 \* process ever crashes.
 fm == CS!CrashStop(0)
 
 Processes == {"A", "B"}
-MessagesToSend == {1, 2, -1}
+
+Fin == -1
+MessagesToSend == (1 .. NumMessages) \cup {Fin}
+Workload == [i \in 1 .. NumMessages |-> i] \o <<Fin>>
 
 VARIABLES link, toSend, sentMessagesA, messageToSend,
           receivedMessageA, receivedMessageB,
@@ -20,7 +25,7 @@ vars == <<link, toSend, sentMessagesA, messageToSend,
 
 Init ==
   /\ link = SL!StubbornLink(Processes, Processes)
-  /\ toSend = <<1, 2, -1>>
+  /\ toSend = Workload
   /\ sentMessagesA = {}
   /\ messageToSend = 0
   /\ receivedMessageA = 0
@@ -39,9 +44,6 @@ SendA ==
   /\ aWaiting' = TRUE
   /\ UNCHANGED <<receivedMessageA, receivedMessageB, bPending, deliveredB>>
 
-\* A stubborn link duplicates deliveries, so A accepts only the echo of the
-\* message it is currently waiting for; stale duplicate echoes of earlier
-\* messages stay in the buffer and are never mistaken for the reply.
 ReceiveA ==
   /\ aWaiting
   /\ SL!HasMessage(link, fm, "B", "A")
@@ -52,9 +54,6 @@ ReceiveA ==
   /\ aWaiting' = FALSE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB, bPending, deliveredB>>
 
-\* B de-duplicates: it delivers each message once, ignoring the extra copies
-\* the stubborn link produces (Cachin: eliminating duplicates over a stubborn
-\* link is exactly how a perfect link is implemented).
 ReceiveB ==
   /\ ~bPending
   /\ SL!HasMessage(link, fm, "A", "B")
@@ -86,20 +85,18 @@ Next ==
   \/ Done
 
 Spec == Init /\ [][Next]_vars
-             /\ WF_vars(Next)
-             /\ SF_vars(SendA)
-             /\ SF_vars(ReceiveA)
-             /\ SF_vars(ReceiveB)
-             /\ SF_vars(EchoB)
+             /\ WF_vars(SendA)
+             /\ WF_vars(ReceiveA)
+             /\ WF_vars(ReceiveB)
+             /\ WF_vars(EchoB)
 
-
-Property1 ==
+PropertyEcho ==
     \A m \in MessagesToSend : [](messageToSend = m => <>(receivedMessageA = m))
 
-Property2 ==
-    <>(receivedMessageB = -1 /\ receivedMessageA = -1)
+PropertyTermination ==
+    <>(receivedMessageB = Fin /\ receivedMessageA = Fin)
 
-Property3 ==
+PropertyNoCreation ==
     \A m \in MessagesToSend : [](receivedMessageA = m => m \in sentMessagesA)
 
 =============================================================================

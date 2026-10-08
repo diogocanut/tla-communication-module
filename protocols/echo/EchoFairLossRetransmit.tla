@@ -1,4 +1,4 @@
--------------------------- MODULE EchoFairLoss --------------------------
+-------------------------- MODULE EchoFairLossRetransmit --------------------------
 EXTENDS Integers, Sequences, TLC
 
 CONSTANTS NumMessages, MaxDrops
@@ -18,10 +18,10 @@ Workload == [i \in 1 .. NumMessages |-> i] \o <<Fin>>
 
 VARIABLES link, toSend, sentMessagesA, messageToSend,
           receivedMessageA, receivedMessageB,
-          aWaiting, bPending
+          aWaiting, bPending, echoMessage, deliveredB
 
 vars == <<link, toSend, sentMessagesA, messageToSend,
-          receivedMessageA, receivedMessageB, aWaiting, bPending>>
+          receivedMessageA, receivedMessageB, aWaiting, bPending, echoMessage, deliveredB>>
 
 Init ==
   /\ link = FL!FairLossLink(Processes, Processes)
@@ -32,6 +32,8 @@ Init ==
   /\ receivedMessageB = 0
   /\ aWaiting = FALSE
   /\ bPending = FALSE
+  /\ echoMessage = 0
+  /\ deliveredB = {}
 
 SendA ==
   /\ ~aWaiting
@@ -42,32 +44,46 @@ SendA ==
   /\ sentMessagesA' = sentMessagesA \cup {messageToSend'}
   /\ toSend' = Tail(toSend)
   /\ aWaiting' = TRUE
-  /\ UNCHANGED <<receivedMessageA, receivedMessageB, bPending>>
+  /\ UNCHANGED <<receivedMessageA, receivedMessageB, bPending, echoMessage, deliveredB>>
+
+ResendA ==
+  /\ aWaiting
+  /\ \E newLink \in FL!Send(link, fm, "A", "B", messageToSend):
+       link' = newLink
+  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA,
+                 receivedMessageB, aWaiting, bPending, echoMessage, deliveredB>>
 
 ReceiveA ==
-  /\ aWaiting
   /\ FL!HasMessage(link, fm, "B", "A")
   /\ \E m \in FL!Messages(link, fm, "B", "A"):
        /\ link' = FL!Receive(link, fm, "B", "A", m)
-       /\ receivedMessageA' = m
-  /\ aWaiting' = FALSE
-  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB, bPending>>
+       /\ IF aWaiting /\ m = messageToSend
+          THEN /\ receivedMessageA' = m
+               /\ aWaiting' = FALSE
+          ELSE UNCHANGED <<receivedMessageA, aWaiting>>
+  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB,
+                 bPending, echoMessage, deliveredB>>
 
 ReceiveB ==
   /\ ~bPending
   /\ FL!HasMessage(link, fm, "A", "B")
   /\ \E m \in FL!Messages(link, fm, "A", "B"):
        /\ link' = FL!Receive(link, fm, "A", "B", m)
-       /\ receivedMessageB' = m
+       /\ echoMessage' = m
+       /\ IF m \notin deliveredB
+          THEN /\ receivedMessageB' = m
+               /\ deliveredB' = deliveredB \cup {m}
+          ELSE UNCHANGED <<receivedMessageB, deliveredB>>
   /\ bPending' = TRUE
   /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, aWaiting>>
 
 EchoB ==
   /\ bPending
-  /\ \E newLink \in FL!Send(link, fm, "B", "A", receivedMessageB):
+  /\ \E newLink \in FL!Send(link, fm, "B", "A", echoMessage):
        link' = newLink
   /\ bPending' = FALSE
-  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, receivedMessageB, aWaiting>>
+  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA,
+                 receivedMessageB, aWaiting, echoMessage, deliveredB>>
 
 Done ==
   /\ toSend = <<>>
@@ -77,12 +93,20 @@ Done ==
 
 Next ==
   \/ SendA
+  \/ ResendA
   \/ ReceiveA
   \/ ReceiveB
   \/ EchoB
   \/ Done
 
 Spec == Init /\ [][Next]_vars
+             /\ WF_vars(SendA)
+             /\ WF_vars(ResendA)
+             /\ WF_vars(ReceiveA)
+             /\ WF_vars(ReceiveB)
+             /\ WF_vars(EchoB)
+
+SpecNoResendFairness == Init /\ [][Next]_vars
              /\ WF_vars(SendA)
              /\ WF_vars(ReceiveA)
              /\ WF_vars(ReceiveB)

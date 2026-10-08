@@ -264,12 +264,12 @@ HNext == \* Hermes (read/write) protocol (Coordinator and Follower actions) + fa
 \* such an action stays enabled, it eventually fires. No fairness on
 \* HWrite (writers choose when to write) or HNodeFailure (failures are voluntary).
 H_Fairness ==
-    /\ \A n \in H_NODES: WF_hvars(HRcvInv(n))
-    /\ \A n \in H_NODES: WF_hvars(HRcvAck(n))
-    /\ \A n \in H_NODES: WF_hvars(HSendVals(n))
-    /\ \A n \in H_NODES: WF_hvars(HRcvVal(n))
-    /\ \A n \in H_NODES: WF_hvars(HCoordWriteReplay(n))
-    /\ \A n \in H_NODES: WF_hvars(HFollowerWriteReplay(n))
+    /\ \A n \in H_NODES: WF_hvars(n \in aliveNodes /\ HRcvInv(n))
+    /\ \A n \in H_NODES: WF_hvars(n \in aliveNodes /\ HRcvAck(n))
+    /\ \A n \in H_NODES: WF_hvars(n \in aliveNodes /\ HSendVals(n))
+    /\ \A n \in H_NODES: WF_hvars(n \in aliveNodes /\ HRcvVal(n))
+    /\ \A n \in H_NODES: WF_hvars(n \in aliveNodes /\ HCoordWriteReplay(n))
+    /\ \A n \in H_NODES: WF_hvars(n \in aliveNodes /\ HFollowerWriteReplay(n))
 
 H_Spec == HInit /\ [][HNext]_hvars /\ H_Fairness
 

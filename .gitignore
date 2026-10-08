@@ -10,3 +10,4 @@ scale-results/
 *.st
 *_TTrace_*
 *.dvi
+protocols/echo/echo-logs/

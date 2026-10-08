@@ -1,14 +1,10 @@
--------------------------- MODULE EchoPerfect --------------------------
+-------------------------- MODULE EchoCrash --------------------------
 EXTENDS Integers, Sequences, TLC
 
-CONSTANTS NumMessages
+CONSTANTS NumMessages, MaxCrashes
 
 CS == INSTANCE CrashStop
 PL == INSTANCE PerfectLinkFIFO
-
-\* Failure-free scenario: the failure model is a constant value in which no
-\* process ever crashes.
-fm == CS!CrashStop(0)
 
 Processes == {"A", "B"}
 
@@ -18,10 +14,10 @@ Workload == [i \in 1 .. NumMessages |-> i] \o <<Fin>>
 
 VARIABLES link, toSend, sentMessagesA, messageToSend,
           receivedMessageA, receivedMessageB,
-          aWaiting, bPending
+          aWaiting, bPending, fm
 
 vars == <<link, toSend, sentMessagesA, messageToSend,
-          receivedMessageA, receivedMessageB, aWaiting, bPending>>
+          receivedMessageA, receivedMessageB, aWaiting, bPending, fm>>
 
 Init ==
   /\ link = PL!PerfectLinkFIFO(Processes, Processes)
@@ -32,8 +28,10 @@ Init ==
   /\ receivedMessageB = 0
   /\ aWaiting = FALSE
   /\ bPending = FALSE
+  /\ fm = CS!CrashStop(MaxCrashes)
 
 SendA ==
+  /\ ~CS!IsCrashed(fm, "A")
   /\ ~aWaiting
   /\ toSend /= <<>>
   /\ messageToSend' = Head(toSend)
@@ -41,7 +39,7 @@ SendA ==
   /\ sentMessagesA' = sentMessagesA \cup {messageToSend'}
   /\ toSend' = Tail(toSend)
   /\ aWaiting' = TRUE
-  /\ UNCHANGED <<receivedMessageA, receivedMessageB, bPending>>
+  /\ UNCHANGED <<receivedMessageA, receivedMessageB, bPending, fm>>
 
 ReceiveA ==
   /\ aWaiting
@@ -50,7 +48,7 @@ ReceiveA ==
        /\ link' = PL!Receive(link, fm, "B", "A")
        /\ receivedMessageA' = m
   /\ aWaiting' = FALSE
-  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB, bPending>>
+  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageB, bPending, fm>>
 
 ReceiveB ==
   /\ ~bPending
@@ -59,13 +57,22 @@ ReceiveB ==
        /\ link' = PL!Receive(link, fm, "A", "B")
        /\ receivedMessageB' = m
   /\ bPending' = TRUE
-  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, aWaiting>>
+  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, aWaiting, fm>>
 
 EchoB ==
+  /\ ~CS!IsCrashed(fm, "B")
   /\ bPending
   /\ link' = PL!Send(link, fm, "B", "A", receivedMessageB)
   /\ bPending' = FALSE
-  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, receivedMessageB, aWaiting>>
+  /\ UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, receivedMessageB, aWaiting, fm>>
+
+ProcessCrash ==
+  \E p \in Processes:
+    /\ ~CS!IsCrashed(fm, p)
+    /\ CS!CanCrash(fm)
+    /\ fm' = CS!Crash(fm, p)
+    /\ UNCHANGED <<link, toSend, sentMessagesA, messageToSend,
+                   receivedMessageA, receivedMessageB, aWaiting, bPending>>
 
 Done ==
   /\ toSend = <<>>
@@ -78,6 +85,7 @@ Next ==
   \/ ReceiveA
   \/ ReceiveB
   \/ EchoB
+  \/ ProcessCrash
   \/ Done
 
 Spec == Init /\ [][Next]_vars
@@ -86,13 +94,26 @@ Spec == Init /\ [][Next]_vars
              /\ WF_vars(ReceiveB)
              /\ WF_vars(EchoB)
 
+BothCorrect == [](~CS!IsCrashed(fm, "A")) /\ [](~CS!IsCrashed(fm, "B"))
+
 PropertyEcho ==
     \A m \in MessagesToSend : [](messageToSend = m => <>(receivedMessageA = m))
 
 PropertyTermination ==
     <>(receivedMessageB = Fin /\ receivedMessageA = Fin)
 
+PropertyEchoCorrect ==
+    \A m \in MessagesToSend :
+      BothCorrect => [](messageToSend = m => <>(receivedMessageA = m))
+
+PropertyTerminationCorrect ==
+    BothCorrect => <>(receivedMessageB = Fin /\ receivedMessageA = Fin)
+
 PropertyNoCreation ==
     \A m \in MessagesToSend : [](receivedMessageA = m => m \in sentMessagesA)
+
+PropertyCrashedIsSilent ==
+    /\ [][CS!IsCrashed(fm, "A") => UNCHANGED <<toSend, sentMessagesA, messageToSend, receivedMessageA, aWaiting>>]_vars
+    /\ [][CS!IsCrashed(fm, "B") => UNCHANGED <<receivedMessageB, bPending>>]_vars
 
 =============================================================================
