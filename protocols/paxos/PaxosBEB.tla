@@ -13,7 +13,7 @@
 
  Modifications from the original:
    - The set msgs of all messages ever sent is replaced by two channels of
-     the TLA+ communication module library: phase 1a and 2a messages are
+     the library: phase 1a and 2a messages are
      broadcast by the ballot owner through BestEffortBroadcast, and phase
      1b and 2b messages travel from each acceptor to the ballot owner over
      PerfectLink. Messages are consumed when received.
@@ -23,7 +23,7 @@
      started (started) and the 2b votes it learned (accepted).
    - votes, a state function derived from the 2b messages in the original,
      is a variable of the acceptor updated in Phase2b.
-   - The histories the inductive invariant Inv quantifies over are derived
+   - The histories the invariant Inv quantifies over are derived
      from the owner state and the messages in transit (Sent1b, Sent2a).
    - Crash semantics imported from the library's CrashStop module: a single
      failure-model value fm is consulted by every operator of both channels,
@@ -111,6 +111,17 @@ Phase1a(b) ==
         /\ fm'    = out.fm
     /\ UNCHANGED <<maxBal, maxVBal, maxVal, votes, promises, proposal, accepted, link>>
 
+Phase1b(a) ==
+    /\ BEB!HasMessage(bcast, fm, Group1a, a)
+    /\ \E m \in BEB!Messages(bcast, fm, Group1a, a) :
+        /\ m.bal > maxBal[a]
+        /\ maxBal' = [maxBal EXCEPT ![a] = m.bal]
+        /\ bcast'  = BEB!Deliver(bcast, fm, Group1a, a, m)
+        /\ link'   = PL!Send(link, fm, a, Owner(m.bal),
+                             [type |-> "1b", acc |-> a, bal |-> m.bal,
+                              mbal |-> maxVBal[a], mval |-> maxVal[a]])
+    /\ UNCHANGED <<maxVBal, maxVal, votes, promises, proposal, started, accepted, fm>>
+
 Receive1b(p) ==
     \E a \in Acceptor :
         /\ PL!HasMessage(link, fm, a, p)
@@ -137,37 +148,6 @@ Phase2a(b, v) ==
         /\ fm'    = out.fm
     /\ UNCHANGED <<maxBal, maxVBal, maxVal, votes, promises, started, accepted, link>>
 
-Learn(p) ==
-    \E a \in Acceptor :
-        /\ PL!HasMessage(link, fm, a, p)
-        /\ \E m \in PL!Messages(link, fm, a, p) :
-            /\ m.type = "2b"
-            /\ link'     = PL!Receive(link, fm, a, p, m)
-            /\ accepted' = [accepted EXCEPT ![m.bal] = @ \cup {<<m.acc, m.val>>}]
-            /\ UNCHANGED <<maxBal, maxVBal, maxVal, votes, promises, proposal, started,
-                           bcast, fm>>
-
-ProposerActions(p) ==
-    \/ \E b \in Ballot :
-        /\ Owner(b) = p
-        /\ \/ Phase1a(b)
-           \/ \E v \in Value : Phase2a(b, v)
-    \/ Receive1b(p)
-    \/ Learn(p)
-
--------------------------------------------------------------------------------------
-
-Phase1b(a) ==
-    /\ BEB!HasMessage(bcast, fm, Group1a, a)
-    /\ \E m \in BEB!Messages(bcast, fm, Group1a, a) :
-        /\ m.bal > maxBal[a]
-        /\ maxBal' = [maxBal EXCEPT ![a] = m.bal]
-        /\ bcast'  = BEB!Deliver(bcast, fm, Group1a, a, m)
-        /\ link'   = PL!Send(link, fm, a, Owner(m.bal),
-                             [type |-> "1b", acc |-> a, bal |-> m.bal,
-                              mbal |-> maxVBal[a], mval |-> maxVal[a]])
-    /\ UNCHANGED <<maxVBal, maxVal, votes, promises, proposal, started, accepted, fm>>
-
 Phase2b(a) ==
     /\ BEB!HasMessage(bcast, fm, Group2a, a)
     /\ \E m \in BEB!Messages(bcast, fm, Group2a, a) :
@@ -180,6 +160,26 @@ Phase2b(a) ==
         /\ link'    = PL!Send(link, fm, a, Owner(m.bal),
                               [type |-> "2b", acc |-> a, bal |-> m.bal, val |-> m.val])
     /\ UNCHANGED <<promises, proposal, started, accepted, fm>>
+
+Learn(p) ==
+    \E a \in Acceptor :
+        /\ PL!HasMessage(link, fm, a, p)
+        /\ \E m \in PL!Messages(link, fm, a, p) :
+            /\ m.type = "2b"
+            /\ link'     = PL!Receive(link, fm, a, p, m)
+            /\ accepted' = [accepted EXCEPT ![m.bal] = @ \cup {<<m.acc, m.val>>}]
+            /\ UNCHANGED <<maxBal, maxVBal, maxVal, votes, promises, proposal, started,
+                           bcast, fm>>
+
+-------------------------------------------------------------------------------------
+
+ProposerActions(p) ==
+    \/ \E b \in Ballot :
+        /\ Owner(b) = p
+        /\ \/ Phase1a(b)
+           \/ \E v \in Value : Phase2a(b, v)
+    \/ Receive1b(p)
+    \/ Learn(p)
 
 AcceptorActions(a) ==
     \/ Phase1b(a)
